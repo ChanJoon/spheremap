@@ -169,6 +169,9 @@ void ExplorationMapper::initialize(ros::NodeHandle* nh) {
   /*   ros::requestShutdown(); */
   /* } */
 
+  /* Bonxai */
+  bonxai_map_ = std::make_shared<Bonxai::ProbabilisticMap>(0.2); //MEMO(ChanJoon): OcTree is initialized with 0.2 in spheremap.cpp
+
   /* services */
   spheremap_planning_srv_        = nh->advertiseService("get_spheremap_path", &ExplorationMapper::callbackGetSphereMapPathSrv, this);
   spheremap_planning_params_srv_ = nh->advertiseService("set_safety_planning_params", &ExplorationMapper::callbackSetSafetyPlanningParams, this);
@@ -807,6 +810,8 @@ void ExplorationMapper::callbackTimerEmptyTopologyMsgsBuffer(const ros::TimerEve
 //}
 
 /* callbackTimerCalculateKdtree()  //{ */
+//TODO(ChanJoon): ~/octomap_binary (octomap_msgs/Octomap) 을 모두 Bonxai 버전으로 수정
+// 일단 test는 현재 rosbag 을 사용해야 하므로 Octree 를 같이 사용해보자.
 void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) {
   if (!has_new_occupancy_octomap_msg_) {
     return;
@@ -814,6 +819,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
 
   octomap_mutex_.lock();
   octomap::AbstractOcTree* tree;
+  //TODO(ChanJoon): Bonxai::ProbabilisticMap bonxai_map(voxel_res);
   if (octomap_msg_is_in_constptr_format_) {
     tree = octomap_msgs::binaryMsgToMap(*octomap_msg_ptr_);
   } else {
@@ -829,7 +835,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
 
   std::shared_ptr<octomap::OcTree> occupancy_octree = std::shared_ptr<octomap::OcTree>(dynamic_cast<octomap::OcTree*>(tree));
 
-  /* ROS_INFO("[SphereMap-kDtree]: occupancy octree resolution: %f", occupancy_octree->getResolution()); */
+  ROS_INFO("[SphereMap-kDtree]: occupancy octree resolution: %f", occupancy_octree->getResolution());
   if (occupancy_octree->getResolution() < 0.18) {
     hires_mode_ = true;
     ROS_INFO("[SphereMap-kDtree]: High resolution octomap detected - only doing spheremap update in smaller bbx of %f m instead of %f m",
@@ -841,12 +847,34 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
 
   occupancy_octree_ptr_mutex_.lock();
   std::vector<pcl::PointXYZ> pcl_points = spheremap_server::octomapToPointcloud(occupancy_octree, generation_bbx);
+  //TODO(ChanJoon): 여기있는 pcl_points 를 Bonxai::ProbabilisticMap 에 넣기
   /* ROS_INFO("[SphereMap-kDtree]: kdtree has %lu points", pcl_points.size()); */
   occupancy_octree_ptr_mutex_.unlock();
 
   end_           = ros::WallTime::now();
   execution_time = (end_ - start_).toSec();
-  /* ROS_INFO("[SphereMap-kDtree]: octomap conversion took %f seconds", execution_time); */
+  ROS_INFO("[SphereMap-kDtree]: octomap conversion took %f seconds", execution_time);
+
+  start_ = ros::WallTime::now();
+  std::vector<octomap::point3d> octomap_points;
+  for (auto it = occupancy_octree->begin_leafs(); it != occupancy_octree->end_leafs(); it++) {
+    if (occupancy_octree->isNodeOccupied(*it)) {
+      octomap_points.push_back(it.getCoordinate());
+    }
+  }
+
+  std::vector<Bonxai::CoordT> bonxai_coords;
+  for (const auto& point : octomap_points) {
+    bonxai_coords.emplace_back(bonxai_map_->grid().posToCoord(point.x(), point.y(), point.z()));
+  }
+
+  for (const auto& coord : bonxai_coords) {
+    bonxai_map_->grid().createAccessor().setValue(coord, Bonxai::ProbabilisticMap::CellT());
+  }
+  end_           = ros::WallTime::now();
+  execution_time = (end_ - start_).toSec();
+  ROS_INFO("[SphereMap-kDtree]: bonxai conversion took %f seconds", execution_time);
+
   start_ = ros::WallTime::now();
 
   std::shared_ptr<PCLMap> tmp_ptr = std::make_shared<PCLMap>();
@@ -863,7 +891,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
   std::scoped_lock lock(frontier_border_node_keys_mutex_);
   octomap::point3d octopoint;
   pcl::PointXYZ    pclpoint;
-  for (uint i = 0; i < frontier_border_node_keys_.size(); i++) {
+  for (uint i = 0; i < frontier_border_node_keys_.size(); i++) {  //TODO(ChanJoon): 여기 구조 그대로 Bonxai화
     octopoint  = occupancy_octree->keyToCoord(frontier_border_node_keys_[i], 16);
     pclpoint.x = octopoint.x();
     pclpoint.y = octopoint.y();
@@ -882,6 +910,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
   /* ROS_INFO("[SphereMap-kDtree]: frontier addition to pcl took %f seconds", execution_time); */
   start_ = ros::WallTime::now();
 
+//TODO(ChanJoon): KDTree 사용되는 곳 파악
   /* INIT KDTREE SEARCH */
   pcl::PointCloud<pcl::PointXYZ>::Ptr simulated_pointcloud = PCLMap::pclVectorToPointcloud(pcl_points);
 

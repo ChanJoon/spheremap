@@ -69,7 +69,7 @@ bool SphereMap::isPinnedBy(float dist2, octomap::point3d smaller_pos, octomap::p
   return false;
 }
 //}
-
+//TODO(ChanJoon)
 /* std::pair<octomap::OcTreeKey, octomap::OcTreeKey> SphereMap::getMaxSearchBBXBorderKeys() //{ */
 std::pair<octomap::OcTreeKey, octomap::OcTreeKey> SphereMap::getMaxSearchBBXBorderKeys(octomap::point3d pos) {
   return getMaxSearchBBXBorderKeys(pos, nearest_best_obstacle_dist_);

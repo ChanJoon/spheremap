@@ -6,7 +6,7 @@ namespace spheremap_server
 {
 
 /* rotationMatrixToQuaternion() //{ */
-tf2::Quaternion rotationMatrixToQuaternion(std::vector<octomap::point3d> v) {
+tf2::Quaternion rotationMatrixToQuaternion(std::vector<Point3DType> v) {
 
   return tf2::Quaternion();  // FIXME
 
@@ -56,7 +56,28 @@ tf2::Quaternion rotationMatrixToQuaternion(std::vector<octomap::point3d> v) {
 //}
 
 /* castRayWithNullNodes() //{ */
-octomap::point3d castRayWithNullNodes(std::shared_ptr<octomap::OcTree> occupancy_octree_, octomap::point3d point, octomap::point3d end_point, bool* hit) {
+Point3DType castRayWithNullNodes(std::shared_ptr<MapType> occupancy_octree_, Point3DType point, Point3DType end_point, bool* hit) {
+#ifdef USE_BONXAI
+  std::vector<Bonxai::CoordT> ray;
+  Bonxai::ComputeRay(point, end_point, ray);
+  bool               found_free_point = false;
+  Bonxai::CoordT     last_free_key;
+
+  for (Bonxai::CoordT key : ray) {
+    if(occupancy_octree_->isFree(key)) {
+      found_free_point = true;
+      last_free_key    = key;
+    } else {
+      break;
+    }
+  }
+  if (found_free_point) {
+    *hit = true;
+    return occupancy_octree_->grid.CoordToPos(last_free_key);
+  }
+  *hit = false;
+  return point;
+#else
   octomap::KeyRay ray;
   occupancy_octree_->computeRayKeys(point, end_point, ray);
   bool               found_free_point = false;
@@ -77,11 +98,36 @@ octomap::point3d castRayWithNullNodes(std::shared_ptr<octomap::OcTree> occupancy
   }
   *hit = false;
   return point;
+#endif
 }
 //}
 
 /* isPointSafe() //{ */
-bool isPointSafe(octomap::point3d center_point, float safe_dist, std::shared_ptr<octomap::OcTree> occupancy_octree_) {
+bool isPointSafe(Point3DType center_point, float safe_dist, std::shared_ptr<MapType> occupancy_octree_) {
+#ifdef USE_BONXAI
+  int               cube_voxel_length = (safe_dist / occupancy_octree_->grid.voxelSize()) + 1;
+  float             safe_dist2        = safe_dist * safe_dist;
+  Bonxai::CoordT    iterator_key;
+
+  Bonxai::CoordT start_key = occupancy_octree_->grid.posToCoord(center_point - Bonxai::CoordT(1, 1, 1) * (safe_dist / 2));
+  for (int xx = start_key[0]; xx < start_key[0] + cube_voxel_length; xx++) {
+    for (int yy = start_key[1]; yy < start_key[1] + cube_voxel_length; yy++) {
+      for (int zz = start_key[2]; zz < start_key[2] + cube_voxel_length; zz++) {
+        iterator_key[0] = xx;
+        iterator_key[1] = yy;
+        iterator_key[2] = zz;
+        if (occupancy_octree_->isOccupied(iterator_key) || occupancy_octree_->isUnknown(iterator_key)) {
+          Eigen::Vector3d delta_vector = (occupancy_octree_->grid.CoordToPos(iterator_key) - center_point);
+          float           dist2        = delta_vector.dot(delta_vector);
+          if (dist2 < safe_dist2) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+  return true;
+#else
   // this manner of choosing the bounding box is not the most accurate, but it works
   int                cube_voxel_length = (safe_dist / occupancy_octree_->getResolution()) + 1;
   float              safe_dist2        = safe_dist * safe_dist;
@@ -107,11 +153,12 @@ bool isPointSafe(octomap::point3d center_point, float safe_dist, std::shared_ptr
     }
   }
   return true;
+#endif
 }
 //}
 
 /* makePointSafe() //{ */
-bool makePointSafe(octomap::point3d* point_ptr, float safe_dist, int max_iters, std::shared_ptr<octomap::OcTree> occupancy_octree_,
+bool makePointSafe(Point3DType* point_ptr, float safe_dist, int max_iters, std::shared_ptr<octomap::OcTree> occupancy_octree_,
                    std::shared_ptr<octomap::SurfaceOcTree> surface_octree_) {
   std::vector<octomap::point3d> occupied_points   = {};
   float                         safety_modifier   = 5;
@@ -170,7 +217,7 @@ bool makePointSafe(octomap::point3d* point_ptr, float safe_dist, int max_iters, 
 //}
 
 /* getRandomFOVRayEndpoint() //{ */
-tf2::Vector3 getRandomFOVRayEndpoint(octomap::point3d top_left_corner, bool is_optic_frame) {
+tf2::Vector3 getRandomFOVRayEndpoint(Point3DType top_left_corner, bool is_optic_frame) {
   if (is_optic_frame) {
     float z = top_left_corner.z();
     float y = top_left_corner.y() * 2 * (double)rand() / (double)RAND_MAX - top_left_corner.y();
@@ -195,13 +242,13 @@ float getExplorednessRelativeToCamera(float dist) {
 //}
 
 /* getHeadingFromVector() //{ */
-float getHeadingFromVector(octomap::point3d normal) {
+float getHeadingFromVector(Point3DType normal) {
   return std::atan2(normal.y(), normal.x());
 }
 //}
 
 /* hasNodeUnknownChildren() //{ */
-bool hasNodeUnknownChildren(octomap::OcTreeNode* node, std::shared_ptr<octomap::OcTree> octree, uint depth) {
+bool hasNodeUnknownChildren(NodeType node, std::shared_ptr<MapType> octree, uint depth) {
   if (octree->nodeHasChildren(node)) {
     for (int i = 0; i < 8; i++) {
       if (octree->nodeChildExists(node, i)) {
@@ -295,7 +342,7 @@ std_msgs::ColorRGBA heatMapColor(double h, double a) {
 //}
 
 /* octomap::point3d getRandomPointInSphere() //{ */
-octomap::point3d getRandomPointInSphere(float r) {
+Point3DType getRandomPointInSphere(float r) {
   float x, y, z;
   while (1) {
     x = 2 * (double)rand() / (double)RAND_MAX - 1;
@@ -308,7 +355,7 @@ octomap::point3d getRandomPointInSphere(float r) {
   return octomap::point3d(x * r, y * r, z * r);
 }
 
-octomap::point3d getRandomPointInSphere(float min_r, float delta_r) {
+Point3DType getRandomPointInSphere(float min_r, float delta_r) {
   float x, y, z;
   while (1) {
     x = 2 * (double)rand() / (double)RAND_MAX - 1;
@@ -364,7 +411,7 @@ BoundingBox getPointsBoundingBox(std::vector<octomap::point3d> points) {
 //}
 
 /* getSegmentColor() //{ */
-octomap::point3d getSegmentColor(int segment_id) {
+Point3DType getSegmentColor(int segment_id) {
   int num_rgbs = 10;
   /* int   num_darkness_levels = 2; */
   float rgbs[][10] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}, {1, 1, 0}, {0, 1, 1}, {1, 0, 1}, {1, 0.5, 0}, {1, 0, 0.5}, {0, 1, 0.5}, {0, 0.5, 1}};
@@ -393,7 +440,7 @@ float getSegmentPathEulerDistance(octomap::SegmentPath path) {
 //}
 
 /* octomapToPointcloud() //{ */
-std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<octomap::OcTree> occupancy_octree_, BoundingBox bbx) {
+std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<MapType> occupancy_octree_, BoundingBox bbx) {
   octomap::OcTreeKey         start_key = occupancy_octree_->coordToKey(bbx.x1, bbx.y1, bbx.z1, 16);
   octomap::OcTreeKey         end_key   = occupancy_octree_->coordToKey(bbx.x2, bbx.y2, bbx.z2, 16);
   std::vector<pcl::PointXYZ> output_pcl;
@@ -415,7 +462,7 @@ std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<octomap::OcTree> 
 //}
 
 /* octomapToPointcloud() //{ */
-std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<octomap::OcTree> occupancy_octree_) {
+std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<MapType> occupancy_octree_) {
   std::vector<pcl::PointXYZ> output_pcl;
   for (octomap::OcTree::iterator it = occupancy_octree_->begin(), end = occupancy_octree_->end(); it != end; ++it) {
     if (it.getDepth() != occupancy_octree_->getTreeDepth())
@@ -436,7 +483,7 @@ std::vector<pcl::PointXYZ> octomapToPointcloud(std::shared_ptr<octomap::OcTree> 
 //}
 
 /* calculatePointFrontierExplorationValue() //{ */
-float calculatePointFrontierExplorationValue(octomap::point3d point, int num_raycasts, std::shared_ptr<octomap::OcTree> occupancy_octree_) {
+float calculatePointFrontierExplorationValue(Point3DType point, int num_raycasts, std::shared_ptr<MapType> occupancy_octree_) {
   /* float                           normal_dot_product_threshold = 0.15; */
   /* float                           ceiling_node_z_threshold     = -0.2; */
   float max_dist           = 10;
@@ -490,7 +537,7 @@ float calculatePointFrontierExplorationValue(octomap::point3d point, int num_ray
 //}
 
 /* publishPointsMarkers() //{ */
-void publishPointsMarkers(std::vector<octomap::point3d> points, std::vector<int> colors, std::string markers_name, float size,
+void publishPointsMarkers(std::vector<Point3DType> points, std::vector<int> colors, std::string markers_name, float size,
                           ros::Publisher* pub_octomap_markers_, std::string map_frame_) {
   int num_points = points.size();
 
@@ -550,7 +597,7 @@ void publishPointsMarkers(std::vector<octomap::point3d> points, std::vector<int>
 //}
 
 /* publishArrowMarkers() //{ */
-void publishArrowMarkers(std::vector<octomap::point3d> points, std::vector<octomap::point3d> points2, std::vector<int> colors, std::string markers_name,
+void publishArrowMarkers(std::vector<Point3DType> points, std::vector<Point3DType> points2, std::vector<int> colors, std::string markers_name,
                          ros::Publisher* pub_octomap_markers_, std::string map_frame_) {
   int num_points = points.size();
 
@@ -674,7 +721,7 @@ void publishMarkers(std::shared_ptr<std::vector<visualization_msgs::Marker>> mar
 //}
 
 /* MARKER CREATING //{ */
-visualization_msgs::Marker getMarkerArrow(octomap::point3d pos, octomap::point3d dir, octomap::point3d color, float shaft_width, float head_width,
+visualization_msgs::Marker getMarkerArrow(Point3DType pos, Point3DType dir, Point3DType color, float shaft_width, float head_width,
                                           float head_length) {
   visualization_msgs::Marker res;
   geometry_msgs::Point       pos2;
@@ -701,7 +748,7 @@ visualization_msgs::Marker getMarkerArrow(octomap::point3d pos, octomap::point3d
 
   return res;
 }
-visualization_msgs::Marker getMarkerSphere(octomap::point3d pos, float d, octomap::point3d color, float alpha) {
+visualization_msgs::Marker getMarkerSphere(Point3DType pos, float d, Point3DType color, float alpha) {
   visualization_msgs::Marker res;
   geometry_msgs::Point       pos2;
   pos2.x = pos.x();
@@ -724,7 +771,7 @@ visualization_msgs::Marker getMarkerSphere(octomap::point3d pos, float d, octoma
   return res;
 }
 
-visualization_msgs::Marker getMarkerCube(octomap::point3d pos, float d, octomap::point3d color) {
+visualization_msgs::Marker getMarkerCube(Point3DType pos, float d, Point3DType color) {
   visualization_msgs::Marker res;
   geometry_msgs::Point       pos2;
   pos2.x = pos.x();
@@ -745,7 +792,7 @@ visualization_msgs::Marker getMarkerCube(octomap::point3d pos, float d, octomap:
   res.scale.z = d;
   return res;
 }
-visualization_msgs::Marker getMarkerLine(octomap::point3d pos, octomap::point3d endpos, octomap::point3d color, float linewidth) {
+visualization_msgs::Marker getMarkerLine(Point3DType pos, Point3DType endpos, Point3DType color, float linewidth) {
   visualization_msgs::Marker res;
   geometry_msgs::Point       pos2;
   pos2.x = pos.x();
@@ -773,7 +820,7 @@ visualization_msgs::Marker getMarkerLine(octomap::point3d pos, octomap::point3d 
   return res;
 }
 
-visualization_msgs::Marker getMarkerBlock(octomap::point3d pos, float alpha, float beta, float a, float b, float c, octomap::point3d color, float clr_alpha) {
+visualization_msgs::Marker getMarkerBlock(Point3DType pos, float alpha, float beta, float a, float b, float c, Point3DType color, float clr_alpha) {
   visualization_msgs::Marker res;
   geometry_msgs::Point       pos2;
   pos2.x = pos.x();
@@ -1145,7 +1192,7 @@ std::vector<visualization_msgs::Marker> getSegmapReceivedMarkers(std::shared_ptr
 /* SPHEREMAP MARKERS */
 
 /* getSpheremapMarkers() //{ */
-std::vector<visualization_msgs::Marker> getSpheremapMarkers(octomap::point3d center, float box_halfsize, std::shared_ptr<SphereMap> spheremap_) {
+std::vector<visualization_msgs::Marker> getSpheremapMarkers(Point3DType center, float box_halfsize, std::shared_ptr<SphereMap> spheremap_) {
   std::vector<visualization_msgs::Marker>           res = {};
   octomap::point3d                                  color(0, 1, 0);
   octomap::point3d                                  frontier_color(1, 0, 1);
@@ -1203,7 +1250,7 @@ std::vector<visualization_msgs::Marker> getSpheremapDebugMarkers(std::shared_ptr
 //}
 
 /* getSpheremapPointMarkers() //{ */
-std::vector<visualization_msgs::Marker> getSpheremapPointMarkers(octomap::point3d center, float box_halfsize, std::shared_ptr<SphereMap> spheremap_,
+std::vector<visualization_msgs::Marker> getSpheremapPointMarkers(Point3DType center, float box_halfsize, std::shared_ptr<SphereMap> spheremap_,
                                                                  bool is_visited_positions_map, float node_maxval, float val_decrease_dist,
                                                                  float blocking_dist) {
   std::vector<visualization_msgs::Marker> res = {};
@@ -1482,7 +1529,7 @@ std::vector<visualization_msgs::Marker> getSpheremapNavigationMarkers(std::share
 //}
 
 /* getPointsMarkers() //{ */
-std::vector<visualization_msgs::Marker> getPointsMarkers(std::vector<pcl::PointXYZ> points, octomap::point3d color, float size) {
+std::vector<visualization_msgs::Marker> getPointsMarkers(std::vector<pcl::PointXYZ> points, Point3DType color, float size) {
   std_msgs::ColorRGBA clr_explored;
   clr_explored.r = color.x();
   clr_explored.g = color.y();
@@ -1512,7 +1559,7 @@ std::vector<visualization_msgs::Marker> getPointsMarkers(std::vector<pcl::PointX
 //}
 
 /* std::vector<visualization_msgs::Marker> getSphereMapPathsMarkers() //{ */
-std::vector<visualization_msgs::Marker> getSphereMapPathsMarkers(std::vector<SphereMapPath> paths, octomap::point3d path_color, float path_line_width) {
+std::vector<visualization_msgs::Marker> getSphereMapPathsMarkers(std::vector<SphereMapPath> paths, Point3DType path_color, float path_line_width) {
   /* marker.type = visualization_msgs::Marker::POINTS; */
   /* geometry_msgs::Point                    pos2; */
   std::vector<visualization_msgs::Marker> res = {};
@@ -1557,7 +1604,7 @@ std::vector<visualization_msgs::Marker> getSphereMapPathsMarkers(std::vector<Sph
 /* FACETMAP MARKERS */
 
 /* std::vector<visualization_msgs::Marker> getFacetMapMarkersFull() //{ */
-std::vector<visualization_msgs::Marker> getFacetMapMarkersFull(octomap::point3d center, float box_halflength,
+std::vector<visualization_msgs::Marker> getFacetMapMarkersFull(Point3DType center, float box_halflength,
                                                                std::shared_ptr<octomap::SurfaceOcTree> surface_octree_) {
   std::vector<visualization_msgs::Marker> markers = {};
 
@@ -1580,7 +1627,7 @@ std::vector<visualization_msgs::Marker> getFacetMapMarkersFull(octomap::point3d 
 //}
 
 /* std::vector<visualization_msgs::Marker> getFacetMapMarkersPoints() //{ */
-std::vector<visualization_msgs::Marker> getFacetMapMarkersPoints(octomap::point3d center, float box_halflength,
+std::vector<visualization_msgs::Marker> getFacetMapMarkersPoints(Point3DType center, float box_halflength,
                                                                  std::shared_ptr<octomap::SurfaceOcTree> surface_octree_) {
   std_msgs::ColorRGBA clr_explored;
   std_msgs::ColorRGBA clr_unexplored;
@@ -1630,7 +1677,7 @@ std::vector<visualization_msgs::Marker> getFacetMapMarkersPoints(octomap::point3
 /* UTILS */
 
 /* getFrontierExplorationData() //{ */
-std::optional<FrontierExplorationPoint> getFrontierExplorationData(octomap::point3d pos, int num_rays, float max_ray_dist,
+std::optional<FrontierExplorationPoint> getFrontierExplorationData(Point3DType pos, int num_rays, float max_ray_dist,
                                                                    std::shared_ptr<octomap::OcTree> occupancy_octree_, bool only_look_down) {
   // TODO check if can compute here
 
@@ -1710,7 +1757,7 @@ std::optional<FrontierExplorationPoint> getFrontierExplorationData(octomap::poin
 //}
 
 /* getNearestSegmentRaycasting() //{ */
-int getNearestSegmentRaycasting(octomap::point3d pos, int num_rays, float max_dist, std::shared_ptr<octomap::OcTree> occupancy_octree_,
+int getNearestSegmentRaycasting(Point3DType pos, int num_rays, float max_dist, std::shared_ptr<MapType> occupancy_octree_,
                                 std::shared_ptr<octomap::SegmentOcTree> seg_octree_) {
   /* int                   search_depth = 16 - seg_octree_->depth_offset; */
   octomap::SegmentNode* node = seg_octree_->search(pos);
@@ -1741,7 +1788,7 @@ int getNearestSegmentRaycasting(octomap::point3d pos, int num_rays, float max_di
 //}
 
 /* getNearestSegmentRaycasting2() //{ */
-int getNearestSegmentRaycasting2(octomap::point3d pos, int num_rays, float max_dist, std::shared_ptr<octomap::OcTree> occupancy_octree_,
+int getNearestSegmentRaycasting2(Point3DType pos, int num_rays, float max_dist, std::shared_ptr<MapType> occupancy_octree_,
                                  std::shared_ptr<octomap::SegmentOcTree> seg_octree_) {
   /* int                   search_depth = 16 - seg_octree_->depth_offset; */
   float                 nearest_seg_dist = 10000;
@@ -1782,7 +1829,7 @@ int getNearestSegmentRaycasting2(octomap::point3d pos, int num_rays, float max_d
 //}
 
 /* filterPoints() //{ */
-void filterPoints(std::vector<octomap::point3d>* in, std::vector<octomap::point3d>* out, float filter_dist) {
+void filterPoints(std::vector<Point3DType>* in, std::vector<Point3DType>* out, float filter_dist) {
   float dist2 = filter_dist * filter_dist;
   for (uint i = 0; i < in->size(); i++) {
     bool filtered = false;
@@ -1801,7 +1848,7 @@ void filterPoints(std::vector<octomap::point3d>* in, std::vector<octomap::point3
 //}
 
 /* getCylinderSamplingPoints() //{ */
-std::vector<octomap::point3d> getCylinderSamplingPoints(int num_points_circle, float delta_r, float delta_z, int num_circles, int num_layers) {
+std::vector<Point3DType> getCylinderSamplingPoints(int num_points_circle, float delta_r, float delta_z, int num_circles, int num_layers) {
   float                         delta_phi = 2 * M_PI / num_points_circle;
   std::vector<octomap::point3d> res       = {};
 
@@ -1830,7 +1877,7 @@ std::vector<octomap::point3d> getCylinderSamplingPoints(int num_points_circle, f
 }
 //}
 
-std::vector<octomap::point3d> blockAnglesToDirections(float alpha, float beta) {
+std::vector<Point3DType> blockAnglesToDirections(float alpha, float beta) {
   /* std::vector<octomap::point3d> res = {, octomap::point3d(0, 1, 0), octomap::point3d(0, 0, 1)}; */
   octomap::point3d x = octomap::point3d(cos(alpha) * cos(beta), -sin(alpha) * cos(beta), sin(beta));
   octomap::point3d y = octomap::point3d(sin(alpha), cos(alpha), 0);
@@ -1844,7 +1891,7 @@ std::pair<float, float> directionsToBlockAngles(std::vector<octomap::point3d> p)
   return std::make_pair(alpha, beta);
 }
 
-std::pair<float, float> calculateBestFitAlphaBeta(std::vector<octomap::point3d>& pts, float sa, float sb) {
+std::pair<float, float> calculateBestFitAlphaBeta(std::vector<Point3DType>& pts, float sa, float sb) {
   int   num_tries_alpha = 5;
   float current_alpha   = M_PI / 4;
   float step            = M_PI / 8;
@@ -1893,7 +1940,7 @@ std::pair<float, float> calculateBestFitAlphaBeta(std::vector<octomap::point3d>&
   return std::make_pair(current_alpha, 0);
 }
 
-std::pair<float, float> calculateBestFitAlphaBeta(std::vector<octomap::point3d>& pts, std::vector<float>& radii, float sa, float sb) {
+std::pair<float, float> calculateBestFitAlphaBeta(std::vector<Point3DType>& pts, std::vector<float>& radii, float sa, float sb) {
   int   num_tries_alpha = 5;
   float current_alpha   = M_PI / 4;
   float step            = M_PI / 8;
@@ -1942,7 +1989,7 @@ std::pair<float, float> calculateBestFitAlphaBeta(std::vector<octomap::point3d>&
   return std::make_pair(current_alpha, 0);
 }
 
-void calculateBlockParamsForSegment(octomap::Segment* seg_ptr, std::vector<octomap::point3d>& deltapoints) {
+void calculateBlockParamsForSegment(octomap::Segment* seg_ptr, std::vector<Point3DType>& deltapoints) {
   std::pair<float, float>       block_angles = spheremap_server::calculateBestFitAlphaBeta(deltapoints);
   std::vector<octomap::point3d> block_dirs   = spheremap_server::blockAnglesToDirections(block_angles.first, block_angles.second);
   float                         aproj, bproj, cproj;
@@ -1971,7 +2018,7 @@ void calculateBlockParamsForSegment(octomap::Segment* seg_ptr, std::vector<octom
   seg_ptr->block_dirs  = block_dirs;  // cache this for faster calculation
 }
 
-void calculateBlockParamsForSegment(std::map<uint, SphereMapSegment>::iterator seg_ptr, std::vector<octomap::point3d>& deltapoints, std::vector<float>& radii) {
+void calculateBlockParamsForSegment(std::map<uint, SphereMapSegment>::iterator seg_ptr, std::vector<Point3DType>& deltapoints, std::vector<float>& radii) {
   std::pair<float, float>       block_angles = spheremap_server::calculateBestFitAlphaBeta(deltapoints, radii);
   std::vector<octomap::point3d> block_dirs   = spheremap_server::blockAnglesToDirections(block_angles.first, block_angles.second);
   float                         aproj, bproj, cproj;
@@ -2001,7 +2048,7 @@ void calculateBlockParamsForSegment(std::map<uint, SphereMapSegment>::iterator s
   seg_ptr->second.block_dirs  = block_dirs;  // cache this for faster calculation
 }
 
-float getObstacleDist(octomap::point3d& test_point, std::shared_ptr<spheremap_server::PCLMap>& pclmap) {
+float getObstacleDist(Point3DType& test_point, std::shared_ptr<spheremap_server::PCLMap>& pclmap) {
   pcl::PointXYZ pcl_point;
   pcl_point.x = test_point.x();
   pcl_point.y = test_point.y();
@@ -2009,7 +2056,7 @@ float getObstacleDist(octomap::point3d& test_point, std::shared_ptr<spheremap_se
   return pclmap->getDistanceFromNearestPoint(pcl_point);
 }
 
-bool arePointsMutuallyVisible2(octomap::point3d p1, octomap::point3d p2, std::shared_ptr<octomap::OcTree> occupancy_octree) {
+bool arePointsMutuallyVisible2(Point3DType p1, Point3DType p2, std::shared_ptr<octomap::OcTree> occupancy_octree) {
   octomap::KeyRay ray;
   occupancy_octree->computeRayKeys(p1, p2, ray);
 
@@ -2022,7 +2069,7 @@ bool arePointsMutuallyVisible2(octomap::point3d p1, octomap::point3d p2, std::sh
   return true;
 }
 
-bool isNear(std::vector<octomap::point3d> points, octomap::point3d test_point, float maxdist) {
+bool isNear(std::vector<Point3DType> points, Point3DType test_point, float maxdist) {
   float maxdist2 = pow(maxdist, 2);
   for (octomap::point3d point : points) {
     if ((test_point - point).norm_sq() < maxdist2) {
@@ -2032,7 +2079,7 @@ bool isNear(std::vector<octomap::point3d> points, octomap::point3d test_point, f
   return false;
 }
 
-std::optional<float> getNearestPointDist(std::vector<octomap::point3d> points, octomap::point3d test_point, float maxdist) {
+std::optional<float> getNearestPointDist(std::vector<Point3DType> points, Point3DType test_point, float maxdist) {
   bool  found_some = false;
   float found_dist2;
 
@@ -2050,7 +2097,7 @@ std::optional<float> getNearestPointDist(std::vector<octomap::point3d> points, o
   return std::nullopt;
 }
 
-geometry_msgs::Point octopoint2geometry(octomap::point3d pos) {
+geometry_msgs::Point octopoint2geometry(Point3DType pos) {
   geometry_msgs::Point pos2;
   pos2.x = pos.x();
   pos2.y = pos.y();

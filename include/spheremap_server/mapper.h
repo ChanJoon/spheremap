@@ -23,6 +23,9 @@
 #include <spheremap_server/mapping_structures.h>
 #include <spheremap_server/spheremap.h>
 
+#include <bonxai/bonxai.hpp>
+#include <bonxai/probabilistic_map.hpp>
+
 #include <sensor_msgs/PointCloud2.h>
 
 namespace spheremap_server
@@ -231,6 +234,8 @@ public:
   std::shared_ptr<octomap::OcTree> occupancy_octree_;
   ros::Time                        latest_occupancy_octree_receive_time_;
 
+  /* bonxai map */
+  std::shared_ptr<Bonxai::ProbabilisticMap> bonxai_map_;
 
   /* topology map */
   std::mutex              mutex_segmap_;

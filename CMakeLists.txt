@@ -18,6 +18,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(USE_BONXAI "Use Bonxai instead of OctoMap" OFF)
+if(USE_BONXAI)
+    add_definitions(-DUSE_BONXAI)
+endif()
+
 # search for everything we need to build the package
 find_package(catkin REQUIRED COMPONENTS
   roscpp
