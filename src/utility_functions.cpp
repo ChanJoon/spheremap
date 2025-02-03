@@ -160,6 +160,56 @@ bool isPointSafe(Point3DType center_point, float safe_dist, std::shared_ptr<MapT
 /* makePointSafe() //{ */
 bool makePointSafe(Point3DType* point_ptr, float safe_dist, int max_iters, std::shared_ptr<octomap::OcTree> occupancy_octree_,
                    std::shared_ptr<octomap::SurfaceOcTree> surface_octree_) {
+#ifdef USE_BONXAI
+  std::vector<Eigen::Vector3d>  occupied_points   = {};
+  float                         safety_modifier   = 5;
+  int                           cube_voxel_length = (safety_modifier * safe_dist / surface_octree_->grid.voxelSize()) + 1; // TODO(ChanJoon) handle SurfaceOcTree
+  float                         safe_dist2        = safe_dist * safe_dist;
+  Bonxai::CoordT                iterator_key;
+
+  Eigen::Vector3d   center_point = *point_ptr;
+  Bonxai::CoordT    start_key    = surface_octree_->grid.posToCoord(center_point - Bonxai::CoordT(1, 1, 1) * (safety_modifier * safe_dist / 2)); // TODO(ChanJoon)
+
+  for (int xx = start_key[0]; xx < start_key[0] + cube_voxel_length; xx++) {
+    for (int yy = start_key[1]; yy < start_key[1] + cube_voxel_length; yy++) {
+      for (int zz = start_key[2]; zz < start_key[2] + cube_voxel_length; zz++) {
+        iterator_key[0] = xx;
+        iterator_key[1] = yy;
+        iterator_key[2] = zz;
+        if (occupancy_octree_->isOccupied(iterator_key) || occupancy_octree_->isUnknown(iterator_key)) {
+          occupied_points.push_back(surface_octree_->grid.CoordToPos(iterator_key));
+        }
+      }
+    }
+  }
+
+  float move_strength = 0.01;
+  Eigen::Vector3d center_point_start_pos = center_point;
+  for (int i = 0; i < max_iters; i++) {
+    Eigen::Vector3d move_vector(0, 0, 0);
+    int             num_near = 0;
+    for (Eigen::Vector3d point : occupied_points) {
+      Eigen::Vector3d delta_vector = (center_point - point);
+      float           dist2        = delta_vector.dot(delta_vector);
+      // capping the dist2 at 0.01m
+      if (dist2 < 0.01) {
+        dist2 = 0.01;
+      }
+      if (dist2 < safe_dist2) {
+        num_near++;
+        move_vector += delta_vector * (move_strength / dist2);
+      }
+    }
+    if (num_near == 0) {
+      *point_ptr = center_point;
+      return true;
+    }
+    center_point += move_vector;
+  }
+
+  *point_ptr = center_point;
+  return false;
+#else
   std::vector<octomap::point3d> occupied_points   = {};
   float                         safety_modifier   = 5;
   int                           cube_voxel_length = (safety_modifier * safe_dist / surface_octree_->getResolution()) + 1;
@@ -213,6 +263,7 @@ bool makePointSafe(Point3DType* point_ptr, float safe_dist, int max_iters, std::
 
   *point_ptr = center_point;
   return false;
+#endif
 }
 //}
 
