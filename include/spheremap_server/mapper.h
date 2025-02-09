@@ -72,9 +72,9 @@ public:
   float frontier_node_frontier_size_threshold_    = 200;
   float frontier_cluster_frontier_size_threshold_ = 500;
 
-  std::vector<octomap::point3d> ground_areas_        = {};
+  std::vector<Point3DType> ground_areas_        = {};
   float                         ground_areas_radius_ = 3;
-  std::vector<octomap::point3d> executed_trajectory_ = {};
+  std::vector<Point3DType> executed_trajectory_ = {};
   std::vector<int>              segment_history_     = {};
 
   float surface_recalc_bbx_size_;
@@ -91,9 +91,9 @@ public:
   void setOctomapMsgMutexPtr(std::mutex* mutex_ptr);
 
   std::mutex                       occupancy_octree_ptr_mutex_;
-  std::shared_ptr<octomap::OcTree> getOccupancyOcTreeSharedPtr() {
+  std::shared_ptr<MapType> getOccupancyOcTreeSharedPtr() {
     occupancy_octree_ptr_mutex_.lock();
-    std::shared_ptr<octomap::OcTree> res = occupancy_octree_;
+    std::shared_ptr<MapType> res = occupancy_octree_;
     occupancy_octree_ptr_mutex_.unlock();
     return res;
   }
@@ -113,7 +113,7 @@ public:
 
   void initialize(ros::NodeHandle* n);
 
-  octomap::point3d current_position_;
+  Point3DType current_position_;
   float            current_heading_;
 
   /* staging area */
@@ -234,7 +234,7 @@ public:
   std::shared_ptr<Bonxai::ProbabilisticMap> bonxai_map_;
 #else
   /* occupancy map */
-  std::shared_ptr<octomap::OcTree> occupancy_octree_;
+  std::shared_ptr<MapType> occupancy_octree_;
   ros::Time                        latest_occupancy_octree_receive_time_;
 #endif
 
@@ -256,7 +256,7 @@ public:
 
   std::vector<FrontierNode> frontier_nodes_ = {};
   void                      updateTopologyMapAtCurrentPosition();
-  void generateFrontierNodes(std::shared_ptr<octomap::OcTree> occupancy_octree, bool search_whole_map = true, BoundingBox search_bbx = BoundingBox());
+  void generateFrontierNodes(std::shared_ptr<MapType> occupancy_octree, bool search_whole_map = true, BoundingBox search_bbx = BoundingBox());
 
   /* frontier group calculation */
   std::vector<FrontierGroup>            frontier_groups_             = {};
@@ -290,13 +290,13 @@ public:
   void                                 publishAllTopologyData();
   std::vector<std::shared_ptr<SegMap>> getReceivedSegmapsPointers();
 
-  float getMaxSurfaceCoverageValOfReceivedSegmapsAtPos(octomap::point3d);
+  float getMaxSurfaceCoverageValOfReceivedSegmapsAtPos(Point3DType);
 
   /* VISITED SPACE MAPPING */
   std::shared_ptr<SphereMap> visited_positions_map_;
 
   std::mutex       visited_positions_map_mutex_;
-  octomap::point3d last_added_visited_position_;
+  Point3DType last_added_visited_position_;
   bool             added_first_visited_position_ = false;
   ros::Time        last_visited_positions_update_time_;
   float            visited_positions_min_addition_dist_       = 0.5;
@@ -305,7 +305,7 @@ public:
   float            visited_positions_dist_for_blocking_       = 0.2;  // will be overriden by planner
   float            visited_positions_dist_for_value_decrease_ = 0.4;  // will be overriden by planner
 
-  float getVisitationValueOfPosition(octomap::point3d, std::shared_ptr<octomap::OcTree> occupancy_octree);
+  float getVisitationValueOfPosition(Point3DType, std::shared_ptr<MapType> occupancy_octree);
 
   /* float visited_positions_map_update_dist_ */
 
@@ -313,18 +313,18 @@ public:
   /* visualization */
   void publishSegmentMarkers(std::shared_ptr<octomap::SegmentOcTree> segment_octree_);
   void publishSegmentMapMarkers(std::shared_ptr<octomap::SegmentOcTree> segment_octree_);
-  void publishPCA(std::vector<octomap::point3d>, const ros::Time& rostime);
-  void publishEllipsoidMarker(std::vector<octomap::point3d>, const ros::Time& rostime);
+  void publishPCA(std::vector<Point3DType>, const ros::Time& rostime);
+  void publishEllipsoidMarker(std::vector<Point3DType>, const ros::Time& rostime);
   void publishTopologyMapMarkers(const ros::Time& rostime);
   void publishFrontierMarkers(const ros::Time& rostime, std::vector<FrontierNode>* frontier_nodes);
   void publishAll(const ros::Time& rostime);
 
   /* class utilities */
   std::mutex                      frontier_border_node_keys_mutex_;
-  std::vector<octomap::OcTreeKey> frontier_border_node_keys_;
+  std::vector<CoordType> frontier_border_node_keys_;
 
-  int getFrontierNodeKeys(std::shared_ptr<octomap::OcTree>& occupancy_octree, octomap::OcTreeKey start_key, uint8_t num_voxels,
-                          std::vector<octomap::OcTreeKey>* res_keys);
+  int getFrontierNodeKeys(std::shared_ptr<MapType>& occupancy_octree, CoordType start_key, uint8_t num_voxels,
+                          std::vector<CoordType>* res_keys);
 };
 
 

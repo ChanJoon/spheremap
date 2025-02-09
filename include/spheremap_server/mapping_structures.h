@@ -15,6 +15,9 @@
 /* #include <geometry_msgs/PoseStamped.h> */
 #include <nav_msgs/Odometry.h>
 #include <spheremap_server/map_types.h>
+#include <octomap_msgs/Octomap.h>
+#include <octomap_msgs/conversions.h>
+#include <octomap/octomap.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <spheremap_server/pcl_map.h>
 
@@ -144,13 +147,12 @@ struct TopologyMappingSettings
 
 }  // namespace spheremap_server
 
-namespace spheremap_server //MEMO(ChanJoon): Before: octomap
+namespace octomap //MEMO(ChanJoon): Before: octomap
 {
 /* DataOcTree and helping structs //{ */
-template <class NODE>
 #ifdef USE_BONXAI
 class DataOcTree {
-public:
+  public:
   Bonxai::ProbabilisticMap bonxai_map;
   DataOcTree(double res) : bonxai_map(res) {
   };
@@ -158,11 +160,11 @@ public:
   DataOcTree* create() const {
     return new DataOcTree(bonxai_map.grid().getResolution());
   }
-
+  
   std::string getTreeType() const {
     return "DataOcTree";
   }
-
+  
   NODE* touchNode(double x, double y, double z, unsigned int target_depth = 0) {
     Bonxai::CoordT key = bonxai_map.grid().posToCoord(x, y, z);
     Bonxai::VoxelGrid<NODE>::Accessor accessor = bonxai_map.createAccessor();
@@ -173,13 +175,14 @@ public:
   Bonxai::VoxelGrid<NODE>::Accessor createAccessor() {
     return bonxai_map.createAccessor();
   }
-
+  
   Bonxaii::VoxelGrid<NODE>::ConstAccessor createConstAccessor() const {
     return bonxai_map.createConstAccessor();
   }
-
+  
 }
 #else
+template <class NODE>
 class DataOcTree : public OcTreeBaseImpl<NODE, AbstractOcTree> {
 public:
   DataOcTree(double res)
@@ -198,7 +201,7 @@ public:
   }
 
   NODE* touchNode(double x, double y, double z, unsigned int target_depth = 0) {
-    OcTreeKey key;
+    CoordType key;
     if (target_depth == 0) {
       if (!this->coordToKeyChecked(x, y, z, key)) {
         ROS_INFO("checked failed");
@@ -214,7 +217,7 @@ public:
     }
   }
 
-  NODE* touchNode(const OcTreeKey& key, unsigned int target_depth = 0) {
+  NODE* touchNode(const CoordType& key, unsigned int target_depth = 0) {
     // early abort (no change will happen).
     // may cause an overhead in some configuration, but more often helps
     NODE* leaf = this->search(key, target_depth);
@@ -235,7 +238,7 @@ public:
     return touchNodeRecurs(this->root, createdRoot, key, 0, target_depth);
   }
 
-  NODE* touchNodeRecurs(NODE* node, bool node_just_created, const OcTreeKey& key, unsigned int depth, unsigned int max_depth = 0) {
+  NODE* touchNodeRecurs(NODE* node, bool node_just_created, const CoordType& key, unsigned int depth, unsigned int max_depth = 0) {
     bool created_node = false;
 
     assert(node);
@@ -362,16 +365,16 @@ public:
     leaf_side_length   = this->getResolution() * leaf_voxel_length;
   };
 
-  std::vector<OcTreeKey> getKeysInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
-    std::vector<OcTreeKey> res = {};
+  std::vector<CoordType> getKeysInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
+    std::vector<CoordType> res = {};
 
     int       step     = pow(2, 16 - depth);
-    OcTreeKey startkey = this->coordToKey(x1, y1, z1, depth);
-    OcTreeKey endkey   = this->coordToKey(x2, y2, z2, depth);
+    CoordType startkey = this->coordToKey(x1, y1, z1, depth);
+    CoordType endkey   = this->coordToKey(x2, y2, z2, depth);
     for (int x = startkey[0]; x <= endkey[0]; x += step) {
       for (int y = startkey[1]; y <= endkey[1]; y += step) {
         for (int z = startkey[2]; z <= endkey[2]; z += step) {
-          OcTreeKey key = OcTreeKey(x, y, z);
+          CoordType key = CoordType(x, y, z);
           res.push_back(key);
         }
       }
@@ -379,20 +382,20 @@ public:
     return res;
   }
 
-  std::vector<OcTreeKey> getKeysInBBX(int depth, spheremap_server::BoundingBox bbx) {
+  std::vector<CoordType> getKeysInBBX(int depth, spheremap_server::BoundingBox bbx) {
     return this->getKeysInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
   }
 
-  std::vector<OcTreeKey> getKeysWithUnknownNodesInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
-    std::vector<OcTreeKey> res = {};
+  std::vector<CoordType> getKeysWithUnknownNodesInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
+    std::vector<CoordType> res = {};
 
     int       step     = pow(2, 16 - depth);
-    OcTreeKey startkey = this->coordToKey(x1, y1, z1, depth);
-    OcTreeKey endkey   = this->coordToKey(x2, y2, z2, depth);
+    CoordType startkey = this->coordToKey(x1, y1, z1, depth);
+    CoordType endkey   = this->coordToKey(x2, y2, z2, depth);
     for (int x = startkey[0]; x <= endkey[0]; x += step) {
       for (int y = startkey[1]; y <= endkey[1]; y += step) {
         for (int z = startkey[2]; z <= endkey[2]; z += step) {
-          OcTreeKey      key  = OcTreeKey(x, y, z);
+          CoordType      key  = CoordType(x, y, z);
           SurfaceOcNode* node = search(key, depth);
           if (node == NULL || node->getUnexploredPtr() == NULL || node->getUnexploredPtr()->size() == 0) {
             continue;
@@ -404,7 +407,7 @@ public:
     return res;
   }
 
-  std::vector<OcTreeKey> getKeysWithUnknownNodesInBBX(int depth, spheremap_server::BoundingBox bbx) {
+  std::vector<CoordType> getKeysWithUnknownNodesInBBX(int depth, spheremap_server::BoundingBox bbx) {
     return this->getKeysWithUnknownNodesInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
   }
 
@@ -612,7 +615,7 @@ public:
 
   Segment* getSegmentPtr(int id);
 
-  bool isKeyInVector(OcTreeKey key, const std::vector<OcTreeKey>& ptr);
+  bool isKeyInVector(CoordType key, const std::vector<CoordType>& ptr);
 
   std::optional<Point3DType> getBestPortalPositionBetweenSegments(int id1, int id2, float min_safe_distance);
 

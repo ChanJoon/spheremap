@@ -197,8 +197,8 @@ bool ExplorationMapper::callbackGetSphereMapPathSrv(GetSphereMapPathSrv::Request
 
   /* ROS_INFO("[callbackGetSphereMapPathSrv]: transforming from %s to %s", start_frame, end_frame); */
 
-  octomap::point3d start_pos_spheremap_frame;
-  octomap::point3d goal_pos_spheremap_frame;
+  Point3DType start_pos_spheremap_frame;
+  Point3DType goal_pos_spheremap_frame;
 
   tf2::Transform request_to_spheremap_transform;
   try {
@@ -211,8 +211,8 @@ bool ExplorationMapper::callbackGetSphereMapPathSrv(GetSphereMapPathSrv::Request
     tf2::Vector3 transformed_start = request_to_spheremap_transform * startpose_vec;
     tf2::Vector3 transformed_goal  = request_to_spheremap_transform * goalpose_vec;
 
-    start_pos_spheremap_frame = octomap::point3d(transformed_start.x(), transformed_start.y(), transformed_start.z());
-    goal_pos_spheremap_frame  = octomap::point3d(transformed_goal.x(), transformed_goal.y(), transformed_goal.z());
+    start_pos_spheremap_frame = Point3DType(transformed_start.x(), transformed_start.y(), transformed_start.z());
+    goal_pos_spheremap_frame  = Point3DType(transformed_goal.x(), transformed_goal.y(), transformed_goal.z());
   }
   catch (tf2::TransformException& ex) {
     ROS_WARN("[callbackGetSphereMapPathSrv]: Transform failed: %s", ex.what());
@@ -326,7 +326,7 @@ void ExplorationMapper::callbackOdometryMessageReceived(const nav_msgs::Odometry
     /* ROS_INFO("Transformation from %s to %s successful", start_frame.c_str(), end_frame.c_str()); */
 
     has_odometry_     = true;
-    current_position_ = octomap::point3d(pose_tmp.pose.position.x, pose_tmp.pose.position.y, pose_tmp.pose.position.z);
+    current_position_ = Point3DType(pose_tmp.pose.position.x, pose_tmp.pose.position.y, pose_tmp.pose.position.z);
     /* ROS_INFO("current_position: %f, %f, %f", current_position_.x(), current_position_.y(), current_position_.z()); */
   }
   catch (tf2::TransformException& ex) {
@@ -465,7 +465,7 @@ void ExplorationMapper::setOctomapMsgPtr(const octomap_msgs::OctomapConstPtr msg
 //}
 
 /* float getVisitationValueOfPosition() //{ */
-float ExplorationMapper::getVisitationValueOfPosition(octomap::point3d cpos, std::shared_ptr<octomap::OcTree> occupancy_octree) {
+float ExplorationMapper::getVisitationValueOfPosition(Point3DType cpos, std::shared_ptr<octomap::OcTree> occupancy_octree) {
   if (!is_initialized_ || !has_odometry_ || !has_occupancy_octomap_) {
     return 0;
   }
@@ -589,7 +589,7 @@ void ExplorationMapper::callbackTimerUpdateVisitedPositionsMap(const ros::TimerE
 
 
   std::scoped_lock   lock(visited_positions_map_mutex_);
-  octomap::point3d   cpos          = current_position_;
+  Point3DType   cpos          = current_position_;
   octomap::OcTreeKey ckey          = visited_positions_map_->nodes->coordToKey(cpos, visited_positions_map_->base_depth_);
   float              current_odist = fmin(getObstacleDist(cpos, pcl_map), visited_positions_map_->enforced_max_sphere_radius);
   if (!added_first_visited_position_) {  // GET FIRST POSITION IN AIR
@@ -856,7 +856,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
   ROS_INFO("[SphereMap-kDtree]: octomap conversion took %f seconds", execution_time);
 
   start_ = ros::WallTime::now();
-  std::vector<octomap::point3d> octomap_points;
+  std::vector<Point3DType> octomap_points;
   for (auto it = occupancy_octree->begin_leafs(); it != occupancy_octree->end_leafs(); it++) {
     if (occupancy_octree->isNodeOccupied(*it)) {
       octomap_points.push_back(it.getCoordinate());
@@ -883,13 +883,13 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
 
   /* DEBUG DRAW KDTREE OCCUPIED MARKERS */
   {
-    std::vector<visualization_msgs::Marker> markers = getPointsMarkers(pcl_points, octomap::point3d(0, 0, 1), 0.25);
+    std::vector<visualization_msgs::Marker> markers = getPointsMarkers(pcl_points, Point3DType(0, 0, 1), 0.25);
     publishMarkers(markers, &pub_frontier_clusters_, "obstacle_kdtree", map_frame_);
   }
 
   /* ADD FRONTIER POSITIONS TO KDTREE */
   std::scoped_lock lock(frontier_border_node_keys_mutex_);
-  octomap::point3d octopoint;
+  Point3DType octopoint;
   pcl::PointXYZ    pclpoint;
   for (uint i = 0; i < frontier_border_node_keys_.size(); i++) {  //TODO(ChanJoon): 여기 구조 그대로 Bonxai화
     octopoint  = occupancy_octree->keyToCoord(frontier_border_node_keys_[i], 16);
@@ -901,7 +901,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
 
   /* DEBUG DRAW KDTREE FRONTIER MARKERS */
   {
-    std::vector<visualization_msgs::Marker> markers = getPointsMarkers(pcl_points, octomap::point3d(0, 1, 0), 0.1);
+    std::vector<visualization_msgs::Marker> markers = getPointsMarkers(pcl_points, Point3DType(0, 1, 0), 0.1);
     publishMarkers(markers, &pub_frontier_clusters_, "obstacle_kdtree_with_frontiers", map_frame_);
   }
 
@@ -1012,21 +1012,21 @@ void ExplorationMapper::generateFrontierNodes(std::shared_ptr<octomap::OcTree> o
   octomap::OcTreeKey start_key, end_key;
 
   BoundingBox      bbx;
-  octomap::point3d bbx_start_pos, bbx_end_pos;
+  Point3DType bbx_start_pos, bbx_end_pos;
   /* DETERMINE BOUNDING KEYS */
   if (search_whole_map) {
     /* double x, y, z; */
     /* occupancy_octree->getMetricMin(x, y, z); */
-    /* bbx_start_pos = octomap::point3d(x, y, z); */
+    /* bbx_start_pos = Point3DType(x, y, z); */
     /* occupancy_octree->getMetricMax(x, y, z); */
-    /* bbx_end_pos = octomap::point3d(x, y, z); */
+    /* bbx_end_pos = Point3DType(x, y, z); */
     bbx           = BoundingBox(hires_mode_ ? absolute_max_map_update_dist_highres + 15 : absolute_max_map_update_dist + 15, current_position_);
-    bbx_start_pos = octomap::point3d(bbx.x1, bbx.y1, bbx.z1);
-    bbx_end_pos   = octomap::point3d(bbx.x2, bbx.y2, bbx.z2);
+    bbx_start_pos = Point3DType(bbx.x1, bbx.y1, bbx.z1);
+    bbx_end_pos   = Point3DType(bbx.x2, bbx.y2, bbx.z2);
   } else {
     bbx           = search_bbx;
-    bbx_start_pos = octomap::point3d(bbx.x1, bbx.y1, bbx.z1);
-    bbx_end_pos   = octomap::point3d(bbx.x2, bbx.y2, bbx.z2);
+    bbx_start_pos = Point3DType(bbx.x1, bbx.y1, bbx.z1);
+    bbx_end_pos   = Point3DType(bbx.x2, bbx.y2, bbx.z2);
   }
 
   /* EDIT SEARCH BOX BOUNDS ACCORINDG TO STAGING AREA */
@@ -1042,7 +1042,7 @@ void ExplorationMapper::generateFrontierNodes(std::shared_ptr<octomap::OcTree> o
     key_dump_ptr               = &frontier_border_node_keys_;
   }
 
-  octomap::point3d   last_point = octomap::point3d(0, 0, 0);
+  Point3DType   last_point = Point3DType(0, 0, 0);
   octomap::OcTreeKey iterator_key;
   for (octomap::OcTree::leaf_bbx_iterator it = occupancy_octree->begin_leafs_bbx(start_key, end_key, search_depth); it != occupancy_octree->end_leafs_bbx();
        it++) {
@@ -1058,13 +1058,13 @@ void ExplorationMapper::generateFrontierNodes(std::shared_ptr<octomap::OcTree> o
       continue;
     }
 
-    octomap::point3d   s_node_coord    = occupancy_octree->keyToCoord(iterator_key, search_depth);
-    octomap::point3d   normal_calc_pos = s_node_coord - octomap::point3d(1, 1, 1) * first_node_in_normal_calculation_offset;
+    Point3DType   s_node_coord    = occupancy_octree->keyToCoord(iterator_key, search_depth);
+    Point3DType   normal_calc_pos = s_node_coord - Point3DType(1, 1, 1) * first_node_in_normal_calculation_offset;
     octomap::OcTreeKey normal_calc_key = occupancy_octree->coordToKey(normal_calc_pos);
 
     int num_nodes = getFrontierNodeKeys(occupancy_octree, normal_calc_key, 4, key_dump_ptr);
     /* new_frontier.normal                        = sdata.normal; */
-    /* new_frontier.normal = octomap::point3d(1, 0, 0); */
+    /* new_frontier.normal = Point3DType(1, 0, 0); */
     // remove vertical nodes
     /* if (abs(new_frontier.normal.z()) > 0.7) { */
     /*   continue; */
@@ -1103,7 +1103,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
   for (uint i = 0; i < frontier_nodes_.size(); i++) {
     bool found_group = false;
     for (uint k = 0; k < groups1.size(); k++) {
-      octomap::point3d deltavec = groups1[k].position - frontier_nodes_[i].position;
+      Point3DType deltavec = groups1[k].position - frontier_nodes_[i].position;
       if (deltavec.dot(deltavec) < node_grouping_dist2) {
         found_group = true;
         // TODO maybe calc number of ceiling, number of vertical nodes
@@ -1153,7 +1153,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
     std::vector<uint> seed_indices          = {};
     int               sum_frontier_elements = groups[i].num_grouped_nodes;
     for (uint k = 0; k < groups.size(); k++) {
-      octomap::point3d deltavec = groups[k].position - groups[i].position;
+      Point3DType deltavec = groups[k].position - groups[i].position;
       if (deltavec.dot(deltavec) < dbscan_dist2) {
         seed_indices.push_back(k);
         sum_frontier_elements += groups[k].num_grouped_nodes;
@@ -1188,7 +1188,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
       sum_frontier_elements           = groups[seed_index].num_grouped_nodes;
       std::vector<uint> neighborhood2 = {};
       for (uint l = 0; l < groups.size(); l++) {
-        octomap::point3d deltavec = groups[l].position - groups[seed_index].position;
+        Point3DType deltavec = groups[l].position - groups[seed_index].position;
         if (deltavec.dot(deltavec) < dbscan_dist2) {
           neighborhood2.push_back(l);
           sum_frontier_elements += groups[l].num_grouped_nodes;
@@ -1229,7 +1229,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
     marker.scale.z = 1;
 
     for (uint i = 0; i < groups.size(); i++) {
-      octomap::point3d color(0, 0, 0);
+      Point3DType color(0, 0, 0);
       if (groups[i].dbscan_group > -1) {
         color = getSegmentColor(groups[i].dbscan_group);
       }
@@ -1264,7 +1264,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
   std::vector<FrontierGroup> generated_fgs = {};
   ros::WallTime              start2_, end2_;
   /* start2_                                   = ros::WallTime::now(); */
-  /* std::vector<octomap::point3d> deltapoints = spheremap_server::getCylinderSamplingPoints(num_points_circle, delta_r, delta_z, num_circles, num_layers); */
+  /* std::vector<Point3DType> deltapoints = spheremap_server::getCylinderSamplingPoints(num_points_circle, delta_r, delta_z, num_circles, num_layers); */
   /* end2_                                     = ros::WallTime::now(); */
   /* ROS_INFO("finding cylinder points took %f ms", (end2_ - start2_).toSec() * 1000); */
 
@@ -1275,7 +1275,7 @@ void ExplorationMapper::calculateFrontierGroups2(bool disciard_small_frontier_gr
   frontier_groups_ = groups;
   /* markers          = {}; */
   /* for (uint i = 0; i < generated_fgs.size(); i++) { */
-  /*   markers.push_back(getMarkerSphere(generated_fgs[i].position, 0.5, octomap::point3d(0.8, 0, 0.8))); */
+  /*   markers.push_back(getMarkerSphere(generated_fgs[i].position, 0.5, Point3DType(0.8, 0, 0.8))); */
   /* } */
   /* publishMarkers(markers, &pub_frontier_clusters_, "debug_dbscan", map_frame_); */
 
@@ -1326,21 +1326,21 @@ void ExplorationMapper::calculateFrontierGroupsForSegmapSending() {
   /* std::vector<FrontierGroup> generated_fgs = {}; */
   ros::WallTime start2_, end2_;
 
-  std::vector<octomap::point3d> deltapoints = spheremap_server::getCylinderSamplingPoints(num_points_circle, delta_r, delta_z, num_circles, num_layers);
+  std::vector<Point3DType> deltapoints = spheremap_server::getCylinderSamplingPoints(num_points_circle, delta_r, delta_z, num_circles, num_layers);
   /* end2_                                     = ros::WallTime::now(); */
   /* ROS_INFO("finding cylinder points took %f ms", (end2_ - start2_).toSec() * 1000); */
 
   int   max_segment_queries_per_point = 20;
   float far_cluster_dist              = 30;
   /* float far_cluster_dist2 = pow(far_cluster_dist, 2); */
-  std::vector<octomap::point3d> checked_positions = {};
+  std::vector<Point3DType> checked_positions = {};
   float                         filter_dist       = 4;
   float                         filter_dist2      = pow(filter_dist, 2);
 
   int n_filtered_pts    = 0;
   int n_found_frontiers = 0;
   for (uint i = 0; i < frontier_cluster_indices_.size(); i++) {
-    std::vector<octomap::point3d> cluster_points  = {};
+    std::vector<Point3DType> cluster_points  = {};
     int                           num_viable_feps = 0;
     int                           f_distance      = 0;
     int                           f_infoval       = 0;
@@ -1349,11 +1349,11 @@ void ExplorationMapper::calculateFrontierGroupsForSegmapSending() {
     bool found_viable_fep = false;
     /* FOR EACH POINT SEARCH IN CYLINDRICAL SPACE AROUND FOR FEPS */
     for (uint j = 0; j < frontier_cluster_indices_[i].size(); j++) {
-      octomap::point3d gpos = frontier_groups_[frontier_cluster_indices_[i][j]].position;
+      Point3DType gpos = frontier_groups_[frontier_cluster_indices_[i][j]].position;
 
       bool should_filter_gpos = false;
       for (uint k = 0; k < checked_positions.size(); k++) {
-        octomap::point3d deltavec = gpos - checked_positions[k];
+        Point3DType deltavec = gpos - checked_positions[k];
         if (deltavec.dot(deltavec) < filter_dist2) {
           should_filter_gpos = true;
         }
@@ -1367,7 +1367,7 @@ void ExplorationMapper::calculateFrontierGroupsForSegmapSending() {
       bool found_fep_tied_to_staging_area = false;
       /* TEST POINTS IN CYLINDERS OF INCREASING WIDTH */
       for (uint k = 0; k < deltapoints.size(); k++) {
-        octomap::point3d test_point = gpos + deltapoints[k];
+        Point3DType test_point = gpos + deltapoints[k];
 
         octomap::OcTreeNode* ocnode = occupancy_octree->search(test_point);
         if (ocnode == NULL || occupancy_octree->isNodeOccupied(ocnode)) {
@@ -1449,14 +1449,14 @@ std::vector<FrontierGroup> ExplorationMapper::filterFrontierGroups(std::vector<F
     if (seg_ptr == NULL) {
       ROS_WARN("[FrontierGroupFiltration]: cannot add group, its segment does not exist");
     }
-    octomap::point3d seg_pos   = seg_ptr->center;
-    octomap::point3d deltavec1 = (groups1[i].viable_fep.pos - seg_pos).normalized();
+    Point3DType seg_pos   = seg_ptr->center;
+    Point3DType deltavec1 = (groups1[i].viable_fep.pos - seg_pos).normalized();
     for (uint k = 0; k < grouped_groups.size(); k++) {
       int seg2 = grouped_groups[k][0].viable_fep.seg_id;
       if (seg2 != seg1) {
         continue;
       }
-      octomap::point3d deltavec2 = (grouped_groups[k][0].viable_fep.pos - seg_pos).normalized();
+      Point3DType deltavec2 = (grouped_groups[k][0].viable_fep.pos - seg_pos).normalized();
       float            vec_dot   = deltavec1.dot(deltavec2);
       if (vec_dot > grouping_proj_threshold) {
         num_grouped++;

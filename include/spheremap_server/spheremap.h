@@ -20,16 +20,16 @@
 #include <spheremap_server/SegmapMsg.h>
 #include <spheremap_server/mapping_structures.h>
 
-namespace octomap
+namespace octomap //MEMO(ChanJoon) Before: octomap
 {
 
 /* SphereMapNode  //{ */
 struct SphereMapNodeData
 {
-  octomap::point3d                pos;
+  Point3DType                pos;
   float                           radius;
   uint                            segment_id;
-  std::vector<octomap::OcTreeKey> connected_keys;
+  std::vector<CoordType> connected_keys;
   float                           frotier_infoval = 0;
   float                           path_len        = 0;
   float                           path_min_safety = 0;
@@ -40,7 +40,7 @@ struct SphereMapNodeData
   bool                            is_stale        = false;
   /* std:: */
 
-  SphereMapNodeData(octomap::point3d p, float r) {
+  SphereMapNodeData(Point3DType p, float r) {
     pos            = p;
     radius         = r;
     segment_id     = 0;
@@ -122,7 +122,7 @@ namespace spheremap_server
 class SphereMapPath {
 public:
   std::vector<uint>             seg_ids;
-  std::vector<octomap::point3d> positions;
+  std::vector<Point3DType> positions;
   std::vector<float>            obstacle_dists;
   float                         getEulerDist();
   float                         length_metres;
@@ -131,15 +131,15 @@ public:
   float                         total_unsafety;
   bool                          reaches_goal = false;
 
-  octomap::point3d original_start;
-  octomap::point3d original_goal;
+  Point3DType original_start;
+  Point3DType original_goal;
 
   float calculateSafetyCost(float min_safedist, float base_safedist) {
     float sum = 0;
     if (obstacle_dists.empty()) {
       return 0;
     }
-    /* octomap::point3d last_point; */
+    /* Point3DType last_point; */
     float safety;
     float interval = base_safedist - min_safedist;
     for (uint i = 0; i < obstacle_dists.size(); i++) {
@@ -156,7 +156,7 @@ public:
     if (positions.empty()) {
       return 0;
     }
-    octomap::point3d last_pos = positions[0];
+    Point3DType last_pos = positions[0];
     for (uint i = 1; i < positions.size(); i++) {
       sumdist += (last_pos - positions[i]).norm();
       last_pos = positions[i];
@@ -204,7 +204,7 @@ public:
       return true;
     }
 
-    octomap::point3d last_pos = positions[0];
+    Point3DType last_pos = positions[0];
     float            sumdist  = 0;
     for (uint i = 0; i < obstacle_dists.size(); i++) {
       sumdist += (last_pos - positions[i]).norm();
@@ -237,8 +237,8 @@ public:
 /* SphereMapFrontierPoint  //{ */
 class SphereMapFrontierPoint {
 public:
-  octomap::point3d   pos;
-  octomap::OcTreeKey adjacent_node_key;
+  Point3DType   pos;
+  CoordType adjacent_node_key;
   float              odist;
   float              information_value;
 };
@@ -253,18 +253,18 @@ struct SphereMapAstarNode
   float               total_g_cost;
   float               h_cost;
   float               total_cost;
-  octomap::point3d    pos1;
-  octomap::point3d    pos2;
-  octomap::OcTreeKey  key1;
-  octomap::OcTreeKey  key2;
+  Point3DType    pos1;
+  Point3DType    pos2;
+  CoordType  key1;
+  CoordType  key2;
   uint                cached_path_index;
   SphereMapPath*      path_ptr    = NULL;
   bool                is_reversed = false;
 
   SphereMapAstarNode() {
   }
-  /* SphereMapAstarNode(uint si, SphereMapAstarNode* pp, float gc, float hc, octomap::point3d p, float tc) { */
-  SphereMapAstarNode(uint si, SphereMapAstarNode* pp, float gc, float hc, octomap::point3d p, float tc) {
+  /* SphereMapAstarNode(uint si, SphereMapAstarNode* pp, float gc, float hc, Point3DType p, float tc) { */
+  SphereMapAstarNode(uint si, SphereMapAstarNode* pp, float gc, float hc, Point3DType p, float tc) {
     seg_id2      = si;
     parent_ptr   = pp;
     total_g_cost = gc;
@@ -273,8 +273,8 @@ struct SphereMapAstarNode
     total_cost   = tc;
   }
 
-  SphereMapAstarNode(uint si1, uint si2, SphereMapAstarNode* pp, float gc, float hc, octomap::point3d p1, octomap::point3d p2, octomap::OcTreeKey k1,
-                     octomap::OcTreeKey k2, float tc) {
+  SphereMapAstarNode(uint si1, uint si2, SphereMapAstarNode* pp, float gc, float hc, Point3DType p1, Point3DType p2, CoordType k1,
+                     CoordType k2, float tc) {
     seg_id1      = si1;
     seg_id2      = si2;
     parent_ptr   = pp;
@@ -301,14 +301,14 @@ struct SphereMapDetailedAstarNode
   float                       total_g_cost;
   float                       h_cost;
   float                       total_cost;
-  octomap::point3d            pos;
-  octomap::OcTreeKey          key;
+  Point3DType            pos;
+  CoordType          key;
   float                       cumulative_infoval = 0;
   float                       safety;
 
   SphereMapDetailedAstarNode() {
   }
-  SphereMapDetailedAstarNode(uint si, SphereMapDetailedAstarNode* pp, float gc, float hc, octomap::point3d p, float tc, octomap::SphereMapNode* mnp) {
+  SphereMapDetailedAstarNode(uint si, SphereMapDetailedAstarNode* pp, float gc, float hc, Point3DType p, float tc, octomap::SphereMapNode* mnp) {
     seg_id       = si;
     parent_ptr   = pp;
     total_g_cost = gc;
@@ -328,11 +328,11 @@ struct SphereMapDetailedAstarNode
 class SphereMapSegmentConnection {
 public:
   /* uint               seg_id1, seg_id2; */
-  octomap::OcTreeKey own_key, other_key;
+  CoordType own_key, other_key;
   float              safety;
   SphereMapSegmentConnection() {
   }
-  SphereMapSegmentConnection(octomap::OcTreeKey own_k, octomap::OcTreeKey other_k, float s) {
+  SphereMapSegmentConnection(CoordType own_k, CoordType other_k, float s) {
     own_key   = own_k;
     other_key = other_k;
     safety    = s;
@@ -349,13 +349,13 @@ public:
 /* SphereMapSegment //{ */
 class SphereMapSegment {
 public:
-  std::vector<octomap::OcTreeKey>                keys;
-  octomap::point3d                               center;
+  std::vector<CoordType>                keys;
+  Point3DType                               center;
   float                                          bounding_sphere_radius;
   std::map<uint, SphereMapSegmentConnection>     connections;
   std::map<std::pair<uint, uint>, SphereMapPath> interportal_paths;
 
-  std::vector<octomap::point3d> block_dirs;
+  std::vector<Point3DType> block_dirs;
   float                         block_alpha = 0;
   float                         block_beta  = 0;
   float                         block_a     = 1;
@@ -372,21 +372,21 @@ class SphereMap {
 public:
   uint                          base_depth_ = 16;
   TopologyMappingSettings       topology_mapping_settings_;
-  std::vector<octomap::point3d> debug_points;
+  std::vector<Point3DType> debug_points;
   BoundingBox                   generation_deny_bbx;
 
   std::shared_ptr<octomap::SphereMapOcTree> nodes;
   std::vector<std::pair<uint, uint>>        portals;
-  std::vector<octomap::point3d>             comm_nodes;
+  std::vector<Point3DType>             comm_nodes;
   std::set<std::pair<uint, uint>>           potential_merge_pairs_;
   std::map<uint, SphereMapPath>             cached_search_start_paths_;
 
   std::vector<uint> changed_segments;
 
-  std::vector<octomap::point3d>    cached_frontier_positions;
+  std::vector<Point3DType>    cached_frontier_positions;
   std::vector<float>               cached_frontier_values;
   bool                             computed_cached_frontiers_atleast_once_ = false;
-  std::shared_ptr<octomap::OcTree> current_octree_;
+  std::shared_ptr<MapType> current_octree_;
   SphereMap() {
   }
 
@@ -400,30 +400,30 @@ public:
   float base_safe_dist              = 1.6;
   float enforced_max_sphere_radius  = 3;
   float nearest_best_obstacle_dist_ = 3;
-  void  updateNearestBestObstacleDist(octomap::point3d pos, float box_halfsize);
+  void  updateNearestBestObstacleDist(Point3DType pos, float box_halfsize);
   float sphere_intersection_reserve     = 0.2;
   float sphere_intersection_reserve_big = 1;  // after r>2
   float largest_bounging_sphere_radius_;
   bool  transform_segmap_to_shared_frame_ = false;
 
   bool areConnectable(float dist2, float radius1, float radius2);
-  bool isPinnedBy(float dist2, octomap::point3d smaller_pos, octomap::point3d larger_pos, float smaller_rad, float larger_rad);
-  std::pair<octomap::OcTreeKey, octomap::OcTreeKey> getMaxSearchBBXBorderKeys(octomap::point3d pos);
-  std::pair<octomap::OcTreeKey, octomap::OcTreeKey> getMaxSearchBBXBorderKeys(octomap::point3d pos, float box_halfsize);
-  std::pair<octomap::OcTreeKey, octomap::OcTreeKey> getMaxSearchBBXBorderKeys(BoundingBox& bbx);
-  void                                update(octomap::point3d current_position_, float current_heading_, std::shared_ptr<octomap::OcTree> occupancy_octree_,
+  bool isPinnedBy(float dist2, Point3DType smaller_pos, Point3DType larger_pos, float smaller_rad, float larger_rad);
+  std::pair<CoordType, CoordType> getMaxSearchBBXBorderKeys(Point3DType pos);
+  std::pair<CoordType, CoordType> getMaxSearchBBXBorderKeys(Point3DType pos, float box_halfsize);
+  std::pair<CoordType, CoordType> getMaxSearchBBXBorderKeys(BoundingBox& bbx);
+  void                                update(Point3DType current_position_, float current_heading_, std::shared_ptr<MapType> occupancy_octree_,
                                              std::shared_ptr<PCLMap> pcl_map_ptr);
   std::set<uint>                      seg_ids_for_interportal_recomputation;
-  void                                updateConnectionsForNode(octomap::OcTreeKey key, bool check_connected_nodes = true);
+  void                                updateConnectionsForNode(CoordType key, bool check_connected_nodes = true);
   bool                                connectedNodesFormFullGraph(octomap::SphereMapNode* node_ptr);
-  std::pair<octomap::OcTreeKey, bool> addNode(octomap::SphereMapNodeData data);
-  bool                                removeNode(octomap::OcTreeKey key);
-  void                                updateObstacleDists(std::shared_ptr<PCLMap> pcl_map_ptr, octomap::point3d box_pos, float box_halfsize);
-  void                                expandAndPrune(std::shared_ptr<PCLMap> pcl_map_ptr, octomap::point3d box_pos, float box_halfsize);
-  bool                                isPointInMap(octomap::point3d);
-  bool                                isPointInMap(octomap::point3d, float box_halfsize);
-  void growNodesSimple(octomap::point3d pos, float box_halfsize, std::shared_ptr<octomap::OcTree> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
-  void growNodesFull(octomap::point3d pos, float box_halfsize, std::shared_ptr<octomap::OcTree> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
+  std::pair<CoordType, bool> addNode(octomap::SphereMapNodeData data);
+  bool                                removeNode(CoordType key);
+  void                                updateObstacleDists(std::shared_ptr<PCLMap> pcl_map_ptr, Point3DType box_pos, float box_halfsize);
+  void                                expandAndPrune(std::shared_ptr<PCLMap> pcl_map_ptr, Point3DType box_pos, float box_halfsize);
+  bool                                isPointInMap(Point3DType);
+  bool                                isPointInMap(Point3DType, float box_halfsize);
+  void growNodesSimple(Point3DType pos, float box_halfsize, std::shared_ptr<MapType> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
+  void growNodesFull(Point3DType pos, float box_halfsize, std::shared_ptr<MapType> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
   SphereMap(float _min_safe_dist, float _base_safe_dist, TopologyMappingSettings topo_settings, StagingAreaSettings* _staging_area_settings);
 
   /* SEGMENTS */
@@ -432,22 +432,22 @@ public:
   uint next_seg_id = 1;
   /* SEG_ID 1 IS RESERVED FOR STAGING_AREA */
 
-  void expansionsStep(octomap::point3d current_position_, std::shared_ptr<octomap::OcTree> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
-  void segmentationStep(octomap::point3d current_position_, std::shared_ptr<octomap::OcTree> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
+  void expansionsStep(Point3DType current_position_, std::shared_ptr<MapType> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
+  void segmentationStep(Point3DType current_position_, std::shared_ptr<MapType> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
 
-  std::vector<uint> getSegmentsIntersectingBBX(octomap::point3d pos, float box_halfsize);
+  std::vector<uint> getSegmentsIntersectingBBX(Point3DType pos, float box_halfsize);
   uint              spreadSegment(uint seg_id);
-  uint              growSegment(octomap::OcTreeKey);
-  void              rebuildSegments(octomap::point3d current_position_, float box_halfsize);
+  uint              growSegment(CoordType);
+  void              rebuildSegments(Point3DType current_position_, float box_halfsize);
   void              removeSegment(std::map<uint, SphereMapSegment>::iterator it);
-  uint              checkSegmentStateAfterKeyRemoval(uint seg_id, std::vector<std::vector<octomap::OcTreeKey>>& surviving_keys);
+  uint              checkSegmentStateAfterKeyRemoval(uint seg_id, std::vector<std::vector<CoordType>>& surviving_keys);
   uint              tryMergingSegments(std::map<uint, SphereMapSegment>::iterator it1, std::map<uint, SphereMapSegment>::iterator it2,
-                                       std::shared_ptr<octomap::OcTree> occupancy_octree_);
+                                       std::shared_ptr<MapType> occupancy_octree_);
   uint              updateConnectionsForSegment(std::map<uint, SphereMapSegment>::iterator it1);
   uint              updateConnectionsForSegmentWithFoundConnections(std::map<uint, SphereMapSegment>::iterator it1,
                                                                     std::map<uint, SphereMapSegmentConnection> safest_connections);
   uint mergeSegments(std::map<uint, SphereMapSegment>::iterator it1, std::map<uint, SphereMapSegment>::iterator it2, bool force_seg1_to_be_master = false);
-  uint mergeSegments(std::map<uint, SphereMapSegment>::iterator it1, std::map<uint, SphereMapSegment>::iterator it2, octomap::point3d new_center,
+  uint mergeSegments(std::map<uint, SphereMapSegment>::iterator it1, std::map<uint, SphereMapSegment>::iterator it2, Point3DType new_center,
                      float new_bounding_sphere_radius, bool force_seg1_to_be_master = false);
   struct segmapnode_pair_compare
   {
@@ -456,49 +456,49 @@ public:
       return (struct1.first < struct2.first);
     }
   };
-  void getUnsegmentedNodesWithObstacleDists(octomap::point3d current_position_, float box_halfsize,
+  void getUnsegmentedNodesWithObstacleDists(Point3DType current_position_, float box_halfsize,
                                             std::vector<std::pair<float, octomap::SphereMapOcTree::leaf_bbx_iterator>>& res_pairs);
 
   /* PRUNING */
-  std::vector<octomap::OcTreeKey> latest_unsafe_node_keys_;
+  std::vector<CoordType> latest_unsafe_node_keys_;
   float                           node_unsafe_time_until_purge = 2;
   float                           node_purging_max_dist;
 
   std::set<uint> segments_with_purged_nodes;
-  void           purgeNodesSimple(octomap::point3d pos, float box_halfsize, bool perform_connectedness_check = false);
-  void           purgeNodesWithTimecheck(octomap::point3d pos, float box_halfsize);
+  void           purgeNodesSimple(Point3DType pos, float box_halfsize, bool perform_connectedness_check = false);
+  void           purgeNodesWithTimecheck(Point3DType pos, float box_halfsize);
   bool           removeSegment(uint seg_id);
 
   /* STAGING AREA HANDLING */
   StagingAreaSettings* staging_area_settings_ptr_;
   bool                 left_staging_area = false;
-  octomap::point3d     home_position_;
+  Point3DType     home_position_;
   bool                 initialized_home_position_;
 
   /* NAVIGATION */
-  std::vector<octomap::OcTreeKey>                     getAdjacentNodesKeys(octomap::point3d test_point);
-  std::optional<std::pair<float, octomap::OcTreeKey>> getNearestNodeKey(octomap::point3d test_point);
-  std::optional<std::pair<float, octomap::OcTreeKey>> getNearestNodeKey(octomap::point3d test_point, float max_dist);
-  std::vector<std::pair<float, octomap::OcTreeKey>>   getNearestNodeKeysForEachSegment(octomap::point3d test_point, float max_dist,
+  std::vector<CoordType>                     getAdjacentNodesKeys(Point3DType test_point);
+  std::optional<std::pair<float, CoordType>> getNearestNodeKey(Point3DType test_point);
+  std::optional<std::pair<float, CoordType>> getNearestNodeKey(Point3DType test_point, float max_dist);
+  std::vector<std::pair<float, CoordType>>   getNearestNodeKeysForEachSegment(Point3DType test_point, float max_dist,
                                                                                        bool only_add_connectable = false, float goal_odist = 0);
 
-  std::vector<octomap::OcTreeKey>                     getConnectableNodesKeys(octomap::point3d test_point, float odist);
-  std::optional<std::pair<float, octomap::OcTreeKey>> getNearestConnectableNodeKey(octomap::point3d test_point, float odist);
-  std::optional<std::pair<float, octomap::OcTreeKey>> getNearestVisibleNodeKey(octomap::point3d test_point, float odist);
+  std::vector<CoordType>                     getConnectableNodesKeys(Point3DType test_point, float odist);
+  std::optional<std::pair<float, CoordType>> getNearestConnectableNodeKey(Point3DType test_point, float odist);
+  std::optional<std::pair<float, CoordType>> getNearestVisibleNodeKey(Point3DType test_point, float odist);
 
 
-  std::optional<std::vector<SphereMapPath>> computePathsToGoalsWithConnectingToGraph(octomap::point3d start_pos, float start_pos_obstacle_distance,
-                                                                                     std::vector<octomap::point3d> goal_positions, float max_goal_pos_dist,
+  std::optional<std::vector<SphereMapPath>> computePathsToGoalsWithConnectingToGraph(Point3DType start_pos, float start_pos_obstacle_distance,
+                                                                                     std::vector<Point3DType> goal_positions, float max_goal_pos_dist,
                                                                                      bool verbose, bool use_precomputed_paths);
 
-  SphereMapPath computePath(octomap::point3d start_point, octomap::point3d goal_point, bool do_astar_in_segments = false, bool request_min_safedist = false,
+  SphereMapPath computePath(Point3DType start_point, Point3DType goal_point, bool do_astar_in_segments = false, bool request_min_safedist = false,
                             float min_path_safedist = 2);
-  SphereMapPath computePath(uint start_seg_id, octomap::point3d start_pos, uint goal_seg_id, octomap::point3d goal_point,
-                            bool compute_astar_in_segments = false, octomap::OcTreeKey node_key_nearest_to_start = octomap::OcTreeKey(),
-                            octomap::OcTreeKey node_key_nearest_to_goal = octomap::OcTreeKey(), bool compute_astar_economically = false,
+  SphereMapPath computePath(uint start_seg_id, Point3DType start_pos, uint goal_seg_id, Point3DType goal_point,
+                            bool compute_astar_in_segments = false, CoordType node_key_nearest_to_start = CoordType(),
+                            CoordType node_key_nearest_to_goal = CoordType(), bool compute_astar_economically = false,
                             bool request_min_safedist = false, float min_path_safedist = 2);
-  SphereMapPath computeDetailedPathInSegment(octomap::OcTreeKey start_key, octomap::OcTreeKey goal_key, float min_odist);
-  SphereMapPath computeDetailedPathInSegment(octomap::OcTreeKey start_key, octomap::OcTreeKey goal_key, std::map<uint, SphereMapSegment>::iterator seg_ptr,
+  SphereMapPath computeDetailedPathInSegment(CoordType start_key, CoordType goal_key, float min_odist);
+  SphereMapPath computeDetailedPathInSegment(CoordType start_key, CoordType goal_key, std::map<uint, SphereMapSegment>::iterator seg_ptr,
                                              float min_odist, bool override_segment_necessity = false);
   float         calculateUnsafetyOfNode(float radius) {
     return pow(1 - fmin((radius - planning_min_safe_dist) / (planning_base_safe_dist - planning_min_safe_dist), 1), 2);
@@ -507,7 +507,7 @@ bool reconstructSphereMapDetailedPath(SphereMapPath& res, SphereMapDetailedAstar
 
   /* FRONTIERS */
   std::vector<SphereMapFrontierPoint> frontier_exporation_points_;
-  void updateFrontiers(bool search_whole_map, octomap::point3d pos, float box_halfsize, std::shared_ptr<octomap::OcTree> occupancy_octree_);
+  void updateFrontiers(bool search_whole_map, Point3DType pos, float box_halfsize, std::shared_ptr<MapType> occupancy_octree_);
 
   /* SENDING */
   void                   computeBoundingBlockForSegment(std::map<uint, SphereMapSegment> seg_ptr, std::vector<octomap::SphereMapNode*>& points);
