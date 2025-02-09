@@ -158,7 +158,7 @@ bool isPointSafe(Point3DType center_point, float safe_dist, std::shared_ptr<MapT
 //}
 
 /* makePointSafe() //{ */
-bool makePointSafe(Point3DType* point_ptr, float safe_dist, int max_iters, std::shared_ptr<octomap::OcTree> occupancy_octree_,
+bool makePointSafe(Point3DType* point_ptr, float safe_dist, int max_iters, std::shared_ptr<MapType> occupancy_octree_,
                    std::shared_ptr<octomap::SurfaceOcTree> surface_octree_) {
 #ifdef USE_BONXAI
   std::vector<Eigen::Vector3d>  occupied_points   = {};

@@ -168,10 +168,10 @@ void ExplorationMapper::initialize(ros::NodeHandle* nh) {
   /*   ROS_ERROR("[mapper]: Could not load all non-optional parameters. Shutting down."); */
   /*   ros::requestShutdown(); */
   /* } */
-
+#ifdef USE_BONXAI
   /* Bonxai */
   bonxai_map_ = std::make_shared<Bonxai::ProbabilisticMap>(0.2); //MEMO(ChanJoon): OcTree is initialized with 0.2 in spheremap.cpp
-
+#endif
   /* services */
   spheremap_planning_srv_        = nh->advertiseService("get_spheremap_path", &ExplorationMapper::callbackGetSphereMapPathSrv, this);
   spheremap_planning_params_srv_ = nh->advertiseService("set_safety_planning_params", &ExplorationMapper::callbackSetSafetyPlanningParams, this);
@@ -862,7 +862,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
       octomap_points.push_back(it.getCoordinate());
     }
   }
-
+#ifdef USE_BONXAI
   std::vector<Bonxai::CoordT> bonxai_coords;
   for (const auto& point : octomap_points) {
     bonxai_coords.emplace_back(bonxai_map_->grid().posToCoord(point.x(), point.y(), point.z()));
@@ -874,7 +874,7 @@ void ExplorationMapper::callbackTimerCalculateKdtree(const ros::TimerEvent& te) 
   end_           = ros::WallTime::now();
   execution_time = (end_ - start_).toSec();
   ROS_INFO("[SphereMap-kDtree]: bonxai conversion took %f seconds", execution_time);
-
+#endif
   start_ = ros::WallTime::now();
 
   std::shared_ptr<PCLMap> tmp_ptr = std::make_shared<PCLMap>();

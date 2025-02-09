@@ -23,8 +23,7 @@
 #include <spheremap_server/mapping_structures.h>
 #include <spheremap_server/spheremap.h>
 
-#include <bonxai/bonxai.hpp>
-#include <bonxai/probabilistic_map.hpp>
+#include <spheremap_server/map_types.h>
 
 #include <sensor_msgs/PointCloud2.h>
 
@@ -230,12 +229,15 @@ public:
   std::shared_ptr<PCLMap> pcl_map_ = NULL;
   bool                    pcl_map_initalized;
 
+#ifdef USE_BONXAI
+  /* bonxai map */
+  std::shared_ptr<Bonxai::ProbabilisticMap> bonxai_map_;
+#else
   /* occupancy map */
   std::shared_ptr<octomap::OcTree> occupancy_octree_;
   ros::Time                        latest_occupancy_octree_receive_time_;
+#endif
 
-  /* bonxai map */
-  std::shared_ptr<Bonxai::ProbabilisticMap> bonxai_map_;
 
   /* topology map */
   std::mutex              mutex_segmap_;
