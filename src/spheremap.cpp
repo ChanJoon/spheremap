@@ -251,8 +251,6 @@ bool SphereMap::connectedNodesFormFullGraph(octomap::SphereMapNode* node_ptr) {
 /* void SphereMap::updateObstacleDists() //{ */
 void SphereMap::updateObstacleDists(std::shared_ptr<PCLMap> pcl_map_ptr, Point3DType box_pos, float box_halfsize) {
   std::pair<CoordType, CoordType> bbx_keys = getMaxSearchBBXBorderKeys(box_pos, box_halfsize);
-  ros::Time                                         now_time = ros::Time::now();
-
   latest_unsafe_node_keys_ = {};
 
   /* ROS_INFO("STARTING UPDATING DISTS"); */
@@ -2635,12 +2633,6 @@ void SphereMap::updateFrontiers(bool search_whole_map, Point3DType pos, float bo
 //}
 
 /* SENDING */
-
-/* void SphereMap::computeBoundingBlockForSegment() //{ */
-void SphereMapcomputeBoundingBlockForSegment(std::map<uint, SphereMapSegment> seg_ptr, std::vector<octomap::SphereMapNode*>& nodes) {
-  /* calculate */
-}
-//}
 
 /* std::vector<SegmapMsg> SphereMap::getSegmapMsgs() //{ */
 std::vector<SegmapMsg> SphereMap::getSegmapMsgs(uint segmap_message_index, int max_data_bytes, tf2_ros::Buffer* tf_buffer, std::string segmap_frame,

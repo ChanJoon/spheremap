@@ -307,18 +307,6 @@ public:
 
   float getVisitationValueOfPosition(Point3DType, std::shared_ptr<MapType> occupancy_octree);
 
-  /* float visited_positions_map_update_dist_ */
-
-
-  /* visualization */
-  void publishSegmentMarkers(std::shared_ptr<octomap::SegmentOcTree> segment_octree_);
-  void publishSegmentMapMarkers(std::shared_ptr<octomap::SegmentOcTree> segment_octree_);
-  void publishPCA(std::vector<Point3DType>, const ros::Time& rostime);
-  void publishEllipsoidMarker(std::vector<Point3DType>, const ros::Time& rostime);
-  void publishTopologyMapMarkers(const ros::Time& rostime);
-  void publishFrontierMarkers(const ros::Time& rostime, std::vector<FrontierNode>* frontier_nodes);
-  void publishAll(const ros::Time& rostime);
-
   /* class utilities */
   std::mutex                      frontier_border_node_keys_mutex_;
   std::vector<CoordType> frontier_border_node_keys_;

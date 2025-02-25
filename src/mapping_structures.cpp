@@ -143,7 +143,6 @@ void SegMap::update(Point3DType current_position_, [[maybe_unused]] float curren
     segment_octree_->expandSegment(seg_id, topology_mapping_settings_.segment_max_size_, topology_mapping_settings_.compactness_delta_,
                                    topology_mapping_settings_.convexity_threshold);
     spheremap_server::BoundingBox bbx(50, current_position_);
-    /* checkNarrowPassagesNearSegments(bbx, occupancy_octree_, pcl_map_ptr); */
   }
 
   mutex_ptr_->unlock();
@@ -156,8 +155,6 @@ void SegMap::update(Point3DType current_position_, [[maybe_unused]] float curren
   int   grown_num           = 0;
   bool  grew_from_raycast   = false;
   for (int i = 0; i < num_rays_for_growth; i++) {
-    int rand_index = rand() % ((int)segs_to_update.size());
-    int rand_id    = segs_to_update[rand_index];
     /* Point3DType ray_start = */
 
     Point3DType test_point = current_position_ + getRandomPointInSphere(1).normalized() * raydist;
@@ -242,7 +239,6 @@ void SegMap::update(Point3DType current_position_, [[maybe_unused]] float curren
       CoordType test_key;
       for (uint k = 0; k < seg_ptr->border_keys.size(); k++) {
         CoordType node_key       = seg_ptr->border_keys[k];
-        bool               is_node_border = false;
         for (int d = 0; d < 6; d++) {
           test_key[0]                 = node_key[0] + dirs[d][0] * segment_octree_->leaf_voxel_length;
           test_key[1]                 = node_key[1] + dirs[d][1] * segment_octree_->leaf_voxel_length;
@@ -748,45 +744,6 @@ void SegMap::updateExplorednessProbabilitiesBasedOnOtherSegmaps(std::vector<std:
 }  // namespace spheremap_server
 //}
 
-/* SegMap::updateWithExecutedTrajectory() //{ */
-void SegMap::updateWithExecutedTrajectory(std::vector<Point3DType>* traj, std::shared_ptr<MapType> occupancy_octree_, float len_from_end) {
-  float dist_sum = 0;
-  if (traj->size() < 2) {
-    return;
-  }
-  Point3DType last_point  = (*traj)[traj->size() - 1];
-  int              last_id     = segment_octree_->getSegmentID(last_point);
-  int              voxel_depth = occupancy_octree_->getTreeDepth() - segment_octree_->depth_offset;
-  for (uint i = traj->size() - 2; i > 0; i--) {
-    Point3DType point  = (*traj)[i];
-    int              seg_id = segment_octree_->getSegmentID(point);
-    dist_sum += (point - last_point).norm();
-    if (dist_sum > len_from_end) {
-      return;
-    }
-    if (last_id > -1 && seg_id > -1 && last_id != seg_id) {
-      if (!segment_octree_->areSegmentsConnected(last_id, seg_id)) {
-        ROS_INFO("[TrajectoryPortalGenerator]: found two segments %d, %d connected by trajectory, adding portal.", last_id, seg_id);
-        Point3DType     midpoint = (point + last_point) * 0.5;
-        NodeType ocnode   = occupancy_octree_->search(midpoint);
-        if (ocnode != NULL && !occupancy_octree_->isNodeOccupied(ocnode) && !spheremap_server::hasNodeUnknownChildren(ocnode, occupancy_octree_, voxel_depth)) {
-          octomap::SegmentPortal portal;
-          portal.position = midpoint;
-          portal.id1      = std::min(seg_id, last_id);
-          portal.id2      = std::max(seg_id, last_id);
-          segment_octree_->addPortal(portal);
-        } else {
-          ROS_WARN("[TrajectoryPortalGenerator]: midpoint is in non-free space! cannot add portal");
-        }
-      }
-    }
-
-    last_point = point;
-    last_id    = seg_id;
-  }
-}
-//}
-
 /* SegMap::getSegmentsIntersectingBBX() //{ */
 void SegMap::getSegmentsIntersectingBBX(std::vector<int>& seg_ids, BoundingBox bbx) {
   for (std::vector<octomap::Segment>::iterator it = segment_octree_->segments.begin(); it != segment_octree_->segments.end(); it++) {
@@ -816,112 +773,11 @@ void SegMap::getSegmentsAndBBXForVPCalc(std::vector<int>& seg_ids, BoundingBox b
 }
 //}
 
-/* SegmMap::getHomeSegmentPtr() //{ */
-std::optional<octomap::Segment*> SegMap::getHomeSegmentPtr() {
-  for (std::vector<octomap::Segment>::iterator it = segment_octree_->segments.begin(); it != segment_octree_->segments.end(); it++) {
-    if (it->is_staging_area) {
-      return &(*it);
-    }
-  }
-  return std::nullopt;
-}
-//}
-
 /* SegMap::recalculateDistsFromHome() //{ */
 void SegMap::recalculateDistsFromHome() {
   if (initialized_segment_octree_) {
     segment_octree_->recalculateDistsFromHome();
   }
-}
-//}
-
-/* SegMap::checkNarrowPassagesNearSegments()  //{ */
-int SegMap::checkNarrowPassagesNearSegments(BoundingBox bbx, std::shared_ptr<MapType> occupancy_octree, std::shared_ptr<PCLMap> pcl_map_ptr) {
-  int   max_voxeldist_from_segment = 10;
-  float max_obstacle_dist          = voxel_min_safe_distance_;
-
-  uint search_depth = 16 - segment_octree_->depth_offset;
-  /* TRY SAMPLING POINTS IN SAFE SPACE AROUND SEGMENT AND IF A SPACE IS FOUND THAT IS FAR FROM ALL SEGMENTS */
-  CoordType            start_key = occupancy_octree->coordToKey(Point3DType(bbx.x1, bbx.y1, bbx.z1), 16);
-  CoordType            end_key   = occupancy_octree->coordToKey(Point3DType(bbx.x2, bbx.y2, bbx.z2), 16);
-  std::vector<Point3DType> test_points;
-  std::vector<Point3DType> safepoints;
-  pcl::PointXYZ                 pcl_point;
-  Point3DType              test_point;
-  Point3DType              deltavec;
-  float                         grouping_dist2 = 1;
-  int                           filtered_dist  = 0;
-
-  ROS_INFO("start finding points");
-
-  for (MapType::leaf_bbx_iterator it = occupancy_octree->begin_leafs_bbx(start_key, end_key); it != occupancy_octree->end_leafs_bbx(); it++) {
-    if (it.getDepth() > search_depth) {
-      continue;
-    }
-    if (occupancy_octree->isNodeOccupied(*it)) {
-      continue;
-    }
-    /* if (it.getDepth() < 14) { */
-    /*   continue; */
-    /* } */
-    octomap::SegmentNode* node = segment_octree_->search(it.getKey(), search_depth);
-    // do not add already segmented keys
-    if (node != NULL && node->getSegmentID() >= 0) {
-      continue;
-    }
-
-    test_point = occupancy_octree->keyToCoord(it.getKey(), search_depth);
-    test_points.push_back(test_point);
-  }
-  ROS_INFO("found %lu possible sample points", test_points.size());
-
-  if (test_points.empty()) {
-    return -2;
-  }
-
-  uint max_sampled_points = 10000;
-  uint n_sampled          = 0;
-  /* std::vector<Point3DType> examined_points = {}; */
-  for (uint i = 0; i < test_points.size() && safepoints.size() < max_sampled_points; i++) {
-    std::vector<Point3DType>::iterator it = test_points.begin();
-    std::advance(it, std::rand() % test_points.size());
-
-    /* bool near_some_point = false; */
-    /* for (uint j = 0; j < safepoints.size(); j++) { */
-    /*   deltavec = safepoints[j] - *it; */
-    /*   if (deltavec.dot(deltavec) < grouping_dist2) { */
-    /*     near_some_point = true; */
-    /*     break; */
-    /*   } */
-    /* } */
-    /* if (near_some_point) { */
-    /*   filtered_dist++; */
-    /*   continue; */
-    /* } */
-
-    /* SAMPLE STARTS HERE */
-    n_sampled++;
-    pcl_point.x   = it->x();
-    pcl_point.y   = it->y();
-    pcl_point.z   = it->z();
-    float obsdist = segment_octree_->pcl_map_ptr->getDistanceFromNearestPoint(pcl_point);
-    if (obsdist < voxel_min_safe_distance_) {
-      continue;
-    }
-
-    /* POINT IS SAFE, NOW TRY RAYCAST */
-    /* int seg_id = getNearestSegmentRaycasting(*it, 100, 30, occupancy_octree, segment_octree_); */
-    /* if (seg_id < 0) { */
-    safepoints.push_back(*it);
-    /*   continue; */
-    /* } */
-  }
-
-  ROS_INFO("filtered by dist: %d", filtered_dist);
-  ROS_INFO("num suspicious points: %lu", safepoints.size());
-  segment_octree_->debug_points_ = safepoints;
-
-  return 0;
 }
 //}
 

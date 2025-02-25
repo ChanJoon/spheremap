@@ -1042,7 +1042,6 @@ void ExplorationMapper::generateFrontierNodes(std::shared_ptr<octomap::OcTree> o
     key_dump_ptr               = &frontier_border_node_keys_;
   }
 
-  Point3DType   last_point = Point3DType(0, 0, 0);
   octomap::OcTreeKey iterator_key;
   for (octomap::OcTree::leaf_bbx_iterator it = occupancy_octree->begin_leafs_bbx(start_key, end_key, search_depth); it != occupancy_octree->end_leafs_bbx();
        it++) {

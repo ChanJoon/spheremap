@@ -27,7 +27,8 @@ public:
   PCLMap(void);
 
   /**
-   * @brief destructor
+   * @brief 
+   * 
    */
   ~PCLMap(void);
 
@@ -58,16 +59,9 @@ public:
    * @param allowed_angle_diff - allowed angle diff from horizontal plane to simulate cyllinder
    * @return float squared distance to the point, if there is no point returns -1
    */
-  float simulatedCyllinderSearch(const double x, const double y, const double z, const double search_radius, const double max_floor_height,
-                                 const double allowed_angle_diff);
 
-  pcl::PointCloud<pcl::PointXYZ>::Ptr getPCLCloud();
   void                                initKDTreeSearch(pcl::PointCloud<pcl::PointXYZ>::Ptr points);
   double                              getDistanceFromNearestPoint(pcl::PointXYZ point);
-  void                                insertPoint(pcl::PointXYZ point);
-  void                                initCloud();
-
-  bool checkDistanceFromNearestPoint(pcl::PointXYZ point, double safe_dist_xy, double safe_dist_z);
 
   static pcl::PointCloud<pcl::PointXYZ>::Ptr pclVectorToPointcloud(const std::vector<pcl::PointXYZ> &points);
 

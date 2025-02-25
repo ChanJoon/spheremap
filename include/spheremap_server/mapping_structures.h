@@ -25,29 +25,6 @@
 
 namespace spheremap_server
 {
-struct CameraInfo
-{
-  bool             connected   = true;
-  bool             initialized = false;
-  float            max_visible_dist;
-  Point3DType camera_FOV_top_left_corner;
-  std::string      camera_info_topic;
-  std::string      camera_frame;
-  CameraInfo(std::string topic) {
-    camera_info_topic = topic;
-  }
-};
-struct SurfaceGroup
-{
-  float            num_grouped_facets        = 0;
-  float            num_grouped_ground_facets = 0;
-  Point3DType pos;
-  SurfaceGroup(Point3DType p, float nf, float ng) {
-    pos                       = p;
-    num_grouped_facets        = nf;
-    num_grouped_ground_facets = ng;
-  }
-};
 
 /* SurfaceNode //{ */
 struct SurfaceNode
@@ -301,27 +278,10 @@ protected:
 //}
 
 /* SurfaceOcTree and helping structs //{ */
-struct SurfaceData
-{
-  Point3DType normal;
-  float            dist_center_to_surface;
-  int              num_frontier_nodes;
-};
-
 struct SurfaceOcNodeStruct
 {
   std::vector<spheremap_server::SurfaceNode> explored;
   std::vector<spheremap_server::SurfaceNode> unexplored;
-};
-
-struct SurfaceNodeKey
-{
-  CoordType key;
-  unsigned int       index;
-  SurfaceNodeKey(CoordType k, unsigned int i) {
-    key   = k;
-    index = i;
-  }
 };
 
 class SurfaceOcNode : public OcTreeDataNode<SurfaceOcNodeStruct> {
@@ -694,47 +654,6 @@ public:
 namespace spheremap_server
 {
 
-/* Ellipsoid definition //{*/
-class Ellipsoid {
-public:
-  Ellipsoid() {
-  }
-  Ellipsoid(Point3DType pos, Point3DType v1, Point3DType v2, Point3DType v3) {
-    position  = pos;
-    values[0] = v1.norm();
-    axes[0]   = v1 * (1 / values[0]);
-    values[1] = v2.norm();
-    axes[1]   = v2 * (1 / values[1]);
-    values[2] = v3.norm();
-    axes[2]   = v3 * (1 / values[2]);
-  }
-  Point3DType position;
-  // should be sorted
-  Point3DType axes[3];
-  float            values[3];
-  bool             isPointInside(Point3DType point) {
-    Point3DType delta = point - position;
-    float            x     = delta.dot(axes[0]);
-    float            y     = delta.dot(axes[1]);
-    float            z     = delta.dot(axes[2]);
-
-    float dist2 = pow(x / values[0], 2) + pow(y / values[1], 2) + pow(z / values[2], 2);
-    if (dist2 > 1) {
-      return false;
-    }
-    return true;
-  }
-  float getVolume() {
-    return (0.75) * M_PI * values[0] * values[1] * values[2];
-  }
-  float getSphereRadius() {
-    return cbrt(values[0] * values[1] * values[2]);
-  }
-  visualization_msgs::Marker getMarker(const ros::Time& rostime);
-};
-
-//}
-
 /* FrontierExplorationPoint //{ */
 class FrontierExplorationPoint {
 public:
@@ -843,12 +762,8 @@ public:
   void              recalculateDistsFromHome();
 
 
-  void updateWithExecutedTrajectory(std::vector<Point3DType>* traj, std::shared_ptr<MapType> occupancy_octree_, float len_from_end);
   void getSegmentsIntersectingBBX(std::vector<int>& seg_ids, BoundingBox bbx);
   void getSegmentsAndBBXForVPCalc(std::vector<int>& seg_ids, BoundingBox bbx_in, BoundingBox& bbx_out);
-  int checkNarrowPassagesNearSegments(BoundingBox bbx, std::shared_ptr<MapType> occupancy_octree_, std::shared_ptr<PCLMap> pcl_map_ptr);
-
-  std::optional<octomap::Segment*> getHomeSegmentPtr();
 
   std::shared_ptr<octomap::SegmentOcTree> segment_octree_;
   int                                     segment_octree_depth_offset_;
