@@ -1720,10 +1720,6 @@ uint SphereMap::tryMergingSegments(std::map<uint, SphereMapSegment>::iterator it
       return 0;
     }
   }
-  /* TEST VISIBILITY */
-  /* if (!spheremap_server::arePointsMutuallyVisible2(it1->second.center, it2->second.center, occupancy_octree_)) { */
-  /*   return 0; */
-  /* } */
 
   /* TEST MAX SIZE */
   if (new_bounding_sphere_radius > topology_mapping_settings_.merged_segment_max_size_) {

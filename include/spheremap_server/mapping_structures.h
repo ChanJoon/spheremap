@@ -130,34 +130,35 @@ namespace octomap //MEMO(ChanJoon): Before: octomap
 #ifdef USE_BONXAI
 class DataOcTree {
   public:
-  Bonxai::ProbabilisticMap bonxai_map;
-  DataOcTree(double res) : bonxai_map(res) {
-  };
+  Bonxai::Grid<NODE> grid_;
+  DataOcTree(double res) : grid_(res, Eigen::Vector3d(0, 0, 0)) {}
 
   DataOcTree* create() const {
-    return new DataOcTree(bonxai_map.grid().getResolution());
+    return new DataOcTree(grid_.getResolution());
   }
-  
+
   std::string getTreeType() const {
     return "DataOcTree";
   }
-  
-  NODE* touchNode(double x, double y, double z, unsigned int target_depth = 0) {
-    Bonxai::CoordT key = bonxai_map.grid().posToCoord(x, y, z);
-    Bonxai::VoxelGrid<NODE>::Accessor accessor = bonxai_map.createAccessor();
-    NODE* node = accessor.getValue(key, true);
+
+  NODE* touchNode(double x, double y, double z, unsigned int /*target_depth*/ = 0) {
+    Bonxai::CoordT key = grid_.posToCoord(x, y, z);
+    NODE* node = grid_.getValue(key);
+    if (!node) {
+      grid_.setValue(key, NODE()); // Default-construct NODE
+      node = grid_.getValue(key);
+    }
     return node;
   }
 
-  Bonxai::VoxelGrid<NODE>::Accessor createAccessor() {
-    return bonxai_map.createAccessor();
+  Bonxai::Grid<NODE>::Accessor createAccessor() {
+    return grid_.createAccessor();
   }
-  
-  Bonxaii::VoxelGrid<NODE>::ConstAccessor createConstAccessor() const {
-    return bonxai_map.createConstAccessor();
+
+  Bonxai::Grid<NODE>::ConstAccessor createConstAccessor() const {
+    return grid_.createConstAccessor();
   }
-  
-}
+};
 #else
 template <class NODE>
 class DataOcTree : public OcTreeBaseImpl<NODE, AbstractOcTree> {
@@ -284,6 +285,36 @@ struct SurfaceOcNodeStruct
   std::vector<spheremap_server::SurfaceNode> unexplored;
 };
 
+#ifdef USE_BONXAI
+class SurfaceOcNode {
+  public:
+    SurfaceOcNodeStruct value;
+
+    // has to be initialized from the outside
+    SurfaceOcNode() : OcTreeDataNode<SurfaceOcNodeStruct>() {
+      value.explored   = {};
+      value.unexplored = {};
+    };
+  
+    void clearUnexplored() {
+      value.unexplored = {};
+    }
+  
+    std::vector<spheremap_server::SurfaceNode>* getExploredPtr() {
+      return &value.explored;
+    }
+  
+    std::vector<spheremap_server::SurfaceNode>* getUnexploredPtr() {
+      return &value.unexplored;
+    }
+  
+  
+    bool operator==([[maybe_unused]] const SurfaceOcNode& rhs) const {
+      return false;
+      // TODO create different isnodecollapsible function when i want to collapse the nodes
+    }
+  };
+#else
 class SurfaceOcNode : public OcTreeDataNode<SurfaceOcNodeStruct> {
 public:
   // has to be initialized from the outside
@@ -310,6 +341,7 @@ public:
     // TODO create different isnodecollapsible function when i want to collapse the nodes
   }
 };
+#endif
 
 class SurfaceOcTree : public DataOcTree<SurfaceOcNode> {
 public:
@@ -322,9 +354,49 @@ public:
     depth_offset       = _depth_offset;
     leaf_voxel_length  = pow(2, depth_offset);
     num_voxels_in_leaf = pow(leaf_voxel_length, 3);
+#ifdef USE_BONXAI
+    leaf_side_length   = this->grid_.getResolution() * leaf_voxel_length;
+#else
     leaf_side_length   = this->getResolution() * leaf_voxel_length;
+#endif
   };
 
+#ifdef USE_BONXAI
+std::vector<Bonxai::CoordT> getKeysInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
+  std::vector<Bonxai::CoordT> res;
+  double res_at_depth = grid_.getResolution() * pow(2, 16 - depth);
+  Bonxai::CoordT start = grid_.posToCoord(x1, y1, z1);
+  Bonxai::CoordT end = grid_.posToCoord(x2, y2, z2);
+  int step = std::max(1, static_cast<int>(res_at_depth / grid_.getResolution()));
+
+  for (int x = start.x; x <= end.x; x += step) {
+    for (int y = start.y; y <= end.y; y += step) {
+      for (int z = start.z; z <= end.z; z += step) {
+        res.emplace_back(x, y, z);
+      }
+    }
+  }
+  return res;
+}
+
+std::vector<Bonxai::CoordT> getKeysWithUnknownNodesInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
+  std::vector<Bonxai::CoordT> res;
+  auto keys = getKeysInBBX(depth, x1, x2, y1, y2, z1, z2);
+  for (const auto& key : keys) {
+    SurfaceOcNode* node = grid_.getValue(key);
+    if (!node || node->getUnexploredPtr()->empty()) continue;
+    res.push_back(key);
+  }
+  return res;
+}
+
+void clearUnexplored() {
+  auto accessor = grid_.createAccessor();
+  for (auto it = accessor.begin(); it != accessor.end(); ++it) {
+    it->second.clearUnexplored();
+  }
+}
+#else
   std::vector<CoordType> getKeysInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
     std::vector<CoordType> res = {};
 
@@ -340,10 +412,6 @@ public:
       }
     }
     return res;
-  }
-
-  std::vector<CoordType> getKeysInBBX(int depth, spheremap_server::BoundingBox bbx) {
-    return this->getKeysInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
   }
 
   std::vector<CoordType> getKeysWithUnknownNodesInBBX(int depth, float x1, float x2, float y1, float y2, float z1, float z2) {
@@ -367,14 +435,19 @@ public:
     return res;
   }
 
-  std::vector<CoordType> getKeysWithUnknownNodesInBBX(int depth, spheremap_server::BoundingBox bbx) {
-    return this->getKeysWithUnknownNodesInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
-  }
-
   void clearUnexplored() {
     for (octomap::SurfaceOcTree::iterator it = this->begin(), end = this->end(); it != end; ++it) {
       it->clearUnexplored();
     }
+  }
+#endif
+
+  std::vector<CoordType> getKeysInBBX(int depth, spheremap_server::BoundingBox bbx) {
+    return this->getKeysInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
+  }
+
+  std::vector<CoordType> getKeysWithUnknownNodesInBBX(int depth, spheremap_server::BoundingBox bbx) {
+    return this->getKeysWithUnknownNodesInBBX(depth, bbx.x1, bbx.x2, bbx.y1, bbx.y2, bbx.z1, bbx.z2);
   }
 
   /// virtual constructor: creates a new object of same type
